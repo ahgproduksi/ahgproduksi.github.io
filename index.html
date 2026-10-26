@@ -108,6 +108,10 @@ main{grid-area:main;min-width:0;padding:18px 24px 100px}
 .ui b{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ui small{font-size:12px;color:var(--muted)}
 .ui small b,.adm{font-size:10.5px}
+.ust{display:block;font-size:12px;color:var(--acc);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.pf-top .ust{white-space:normal;margin-top:3px}
+.urow .st-ed{opacity:.55;flex:none}
+.urow:hover .st-ed{opacity:1}
 .adm{background:color-mix(in srgb,var(--acc) 18%,transparent);color:var(--acc);border-radius:99px;padding:1px 6px}
 .wh-ic{opacity:0;font-size:14px}
 .urow:hover .wh-ic{opacity:.8}
@@ -2610,7 +2614,7 @@ const LCH = {
 };
 
 // Virtual Work AHG — reminder, global chat (+ whisper), task (+ rutin mingguan) dan kasbon tim. Data di Supabase (proyek saku-yuk), sinkron real time.
-const BUILD = '20261022-130610';
+const BUILD = '20261026-151016';
 const SB_URL = 'https://herltzublcqpbgyxbbyp.supabase.co', SB_KEY = 'sb_publishable_FMSC0iqDRLsRXtvTtZX0Ow_piPi5bli'; // public key; tables closed, only ahg_* functions
 
 // ---------- helpers ----------
@@ -2668,7 +2672,7 @@ const VIEWS = { home: ['📊', 'Dashboard'], reminder: ['⏰', 'Reminder'], chat
 // ---------- state ----------
 const now0 = new Date();
 const S = {
-  token: '', me: null, users: [], skew: 0, items: new Map(), seq: 0, queue: new Set(), loaded: false,
+  token: '', me: null, users: [], status: {}, skew: 0, items: new Map(), seq: 0, queue: new Set(), loaded: false,
   view: 'reminder',
   rem: { mode: ['list', 'board', 'cal'].includes(LS.get('remMode')) ? LS.get('remMode') : 'list', pick: '', open: {}, cal: true, y: now0.getFullYear(), m: now0.getMonth(), sel: '', addDate: '', st: 'open', scope: 'all', who: '', sort: 'date' },
   chat: { conv: 'g', files: [], limit: 200, sending: false },
@@ -2682,8 +2686,11 @@ const live = kind => [...S.items.values()].filter(i => i.kind === kind && !i.del
 const canEdit = it => isAdmin() || it.owner === S.me?.name;
 const user = n => S.users.find(u => u.name === n);
 const uname = n => user(n)?.display || n || '—';
+const ustatus = n => S.status?.[n] || '';
+const canStatus = n => !!S.me && (n === S.me.name || isAdmin());
+const stLine = n => ustatus(n) ? `<small class="ust" title="Status">🏷 ${esc(ustatus(n))}</small>` : '';
 function ucolor(n) { const u = user(n); if (u?.color) return u.color; let h = 0; for (const c of String(n)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return AV_COLORS[h % AV_COLORS.length]; }
-const av = (n, cls = '') => `<span class="av ${cls}" style="--av:${ucolor(n)}" title="${esc(uname(n))}">${esc((uname(n) || '?').trim().slice(0, 1).toUpperCase())}</span>`;
+const av = (n, cls = '') => `<span class="av ${cls}" style="--av:${ucolor(n)}" title="${esc(uname(n) + (ustatus(n) ? ' — ' + ustatus(n) : ''))}">${esc((uname(n) || '?').trim().slice(0, 1).toUpperCase())}</span>`;
 const srvNow = () => Date.now() - S.skew;
 const online = u => u && !u.away && u.last_seen && srvNow() - Date.parse(u.last_seen) < 75000;
 const pref = () => { const p = live('pref').filter(i => i.owner === S.me?.name).sort((a, b) => b.updated - a.updated)[0]; return p || null; };
@@ -2694,14 +2701,14 @@ const cacheKey = () => 'c.' + S.me?.name;
 function saveCache() {
   if (!S.me) return;
   const items = [...S.items.values()];
-  try { localStorage.setItem('ahg.' + cacheKey(), JSON.stringify({ items, seq: S.seq, queue: [...S.queue], users: S.users, me: S.me })); }
-  catch { try { localStorage.setItem('ahg.' + cacheKey(), JSON.stringify({ items: items.filter(i => S.queue.has(i.id)), seq: 0, queue: [...S.queue], users: S.users, me: S.me })); } catch {} }
+  try { localStorage.setItem('ahg.' + cacheKey(), JSON.stringify({ items, seq: S.seq, queue: [...S.queue], users: S.users, status: S.status, me: S.me })); }
+  catch { try { localStorage.setItem('ahg.' + cacheKey(), JSON.stringify({ items: items.filter(i => S.queue.has(i.id)), seq: 0, queue: [...S.queue], users: S.users, status: S.status, me: S.me })); } catch {} }
 }
 function loadCache() {
   S.items = new Map(); S.queue = new Set(); S.seq = 0;
   const c = jget(cacheKey(), null); if (!c) return;
   for (const it of c.items || []) S.items.set(it.id, it);
-  S.seq = Number(c.seq || 0); S.queue = new Set(c.queue || []); S.users = c.users || S.users;
+  S.seq = Number(c.seq || 0); S.queue = new Set(c.queue || []); S.users = c.users || S.users; S.status = c.status || {};
   if (c.me && !S.me.fresh) S.me = { ...S.me, ...c.me };
 }
 
@@ -2777,6 +2784,33 @@ async function syncNow() {
   finally { S.sync.busy = false; }
   if (S.sync.again) { S.sync.again = false; return syncNow(); }
   if (changed) { render(); if (S.view === 'chat' && !document.hidden) markRead(); } else { showSync(); renderUsers(); }
+  loadStatus();
+}
+// status orang (mis. "Admin Basecamp Bugel : SCP, PCP") lives in ahg_users.status, read via its own RPC every 30 s
+let stAt = 0;
+async function loadStatus(force) {
+  if (!S.token || (!force && Date.now() - stAt < 30000)) return; stAt = Date.now();
+  try {
+    const r = await rpc('ahg_status_list', { p_token: S.token }, { once: true }); if (!r?.ok) return;
+    const st = r.status || {}; if (JSON.stringify(st) === JSON.stringify(S.status)) return;
+    S.status = st; saveCache(); render();
+  } catch {}
+}
+async function saveStatus(name, text) {
+  const r = await rpc('ahg_status_set', { p_token: S.token, p_target: name === S.me.name ? '' : name, p_status: text });
+  if (!r?.ok) throw new Error({ auth: 'sesi tidak valid — logout lalu login lagi', forbidden: 'hanya Admin yang bisa mengubah status orang lain', not_found: 'user tidak ditemukan' }[r?.err] || r?.err || 'gagal');
+  const st = { ...S.status }; if (r.status) st[r.name] = r.status; else delete st[r.name];
+  S.status = st; saveCache(); ping(); render();
+  return r.status;
+}
+const stSuggest = () => `<datalist id="st-list">${[...new Set(Object.values(S.status || {}))].sort().map(v => `<option value="${esc(v)}">`).join('')}</datalist>`;
+async function statusDialog(name) {
+  if (!canStatus(name)) return;
+  const r = await confirmDlg(`🏷 Status <b>${esc(uname(name))}</b> <span class="muted small">@${esc(name)}</span>`, 'Simpan', false,
+    `<label>Status / jabatan<input id="st-dlg" value="${esc(ustatus(name))}" maxlength="80" list="st-list" placeholder="mis. Admin Basecamp Bugel : SCP, PCP"></label>${stSuggest()}<p class="muted small">Kosongkan untuk menghapus status.</p>`);
+  if (!r) return;
+  try { const v = await saveStatus(name, $('#st-dlg', r.form).value); toast(v ? `Status <b>${esc(uname(name))}</b>: ${esc(v)}` : `Status <b>${esc(uname(name))}</b> dihapus.`, 'info', null, 3000); }
+  catch (e) { toast('Gagal: ' + esc(e.message), 'warn'); }
 }
 // realtime: supabase broadcast pings (no data inside), plus a 15 s check that also keeps "online" fresh
 let sb = null, chan = null;
@@ -2926,7 +2960,7 @@ function start(msg) {
   render(); liveStart(); syncNow().then(() => { const t2 = prefData().theme; if (t2 && JSON.stringify(t2) !== JSON.stringify(theme())) { LS.set('theme', JSON.stringify(t2)); applyTheme(); } checkDue(true); });
   if (msg) toast(msg, 'info', null, 9000);
 }
-function clearSession() { LS.del('session'); SS.del('session'); liveStop(); S.token = ''; S.me = null; S.items = new Map(); S.queue = new Set(); S.seq = 0; S.users = []; closeAll(); }
+function clearSession() { LS.del('session'); SS.del('session'); liveStop(); S.token = ''; S.me = null; S.items = new Map(); S.queue = new Set(); S.seq = 0; S.users = []; S.status = {}; stAt = 0; closeAll(); }
 async function logout() {
   if (S.queue.size) await syncNow().catch(() => {});
   rpc('ahg_away', { p_token: S.token, p_logout: true }, { once: true }).catch(() => {});
@@ -3059,8 +3093,8 @@ function userList(compact) {
   return list.map(u => { const me = u.name === S.me.name, w = unread['w:' + u.name] || 0;
     return `<div class="urow ${me ? 'me' : ''}" ${me ? '' : `data-a="whisper" data-u="${esc(u.name)}" title="Whisper ke ${esc(uname(u.name))}"`}>
       <span class="avw">${av(u.name)}<i class="st ${online(u) ? 'on' : ''}"></i></span>
-      <span class="ui"><b>${esc(uname(u.name))}${me ? ' <small>(kamu)</small>' : ''}${u.role === 'admin' ? ' <small class="adm">Admin</small>' : ''}</b><small>@${esc(u.name)} · ${lastSeenText(u)}${u.reset ? ' · <span class="warn-t">password direset</span>' : ''}</small></span>
-      ${w ? `<span class="n hot">${w}</span>` : me || compact ? '' : '<span class="wh-ic">🤫</span>'}
+      <span class="ui"><b>${esc(uname(u.name))}${me ? ' <small>(kamu)</small>' : ''}${u.role === 'admin' ? ' <small class="adm">Admin</small>' : ''}</b>${stLine(u.name)}<small>@${esc(u.name)} · ${lastSeenText(u)}${u.reset ? ' · <span class="warn-t">password direset</span>' : ''}</small></span>
+      ${!compact && isAdmin() ? `<button type="button" class="ib st-ed" data-a="stEdit" data-u="${esc(u.name)}" title="Ubah status ${esc(uname(u.name))}">🏷</button>` : ''}${w ? `<span class="n hot">${w}</span>` : me || compact ? '' : '<span class="wh-ic">🤫</span>'}
     </div>`; }).join('');
 }
 function renderUsers() {
@@ -3240,7 +3274,7 @@ function vChat() {
     </aside>
     <section class="cpane">
       <div class="c-h"><select class="m-conv" id="m-conv" data-ch="convSel" data-keep="0">${cl.map(x => `<option value="${esc(x.c)}" ${x.c === c ? 'selected' : ''}>${esc(convName(x.c))}${per[x.c] ? ` (${per[x.c]})` : ''}</option>`).join('')}<option value="+">＋ Whisper baru…</option></select>
-        <b class="d-conv">${esc(convName(c))}</b><span class="muted small">${c === 'g' ? `${S.users.length} anggota · ${S.users.filter(online).length} online` : `${online(user(c.slice(2))) ? '● Online' : user(c.slice(2)) ? lastSeenText(user(c.slice(2))) : ''} · hanya kalian berdua yang bisa melihat`}</span></div>
+        <b class="d-conv">${esc(convName(c))}</b><span class="muted small">${c === 'g' ? `${S.users.length} anggota · ${S.users.filter(online).length} online` : `${ustatus(c.slice(2)) ? '🏷 ' + esc(ustatus(c.slice(2))) + ' · ' : ''}${online(user(c.slice(2))) ? '● Online' : user(c.slice(2)) ? lastSeenText(user(c.slice(2))) : ''} · hanya kalian berdua yang bisa melihat`}</span></div>
       <div class="c-list" id="c-list" data-scroll="chat">${all.length > msgs.length ? `<button type="button" class="btn sm more" data-a="chatMore">Muat pesan lebih lama (${all.length - msgs.length})</button>` : ''}${out || `<p class="empty">${c === 'g' ? 'Belum ada pesan. Sapa timmu! 👋' : 'Belum ada whisper. Pesan di sini hanya terlihat oleh kalian berdua.'}</p>`}</div>
       <form class="composer ${c !== 'g' ? 'whm' : ''}" id="composer">
         ${c !== 'g' ? `<div class="wh-bar">🤫 Whisper ke <b>${esc(uname(c.slice(2)))}</b> — orang lain tidak bisa melihat <button type="button" class="mini" data-a="conv" data-c="g">Kembali ke Global</button></div>` : ''}
@@ -4041,12 +4075,12 @@ function vAdmin() {
   const count = (n, k) => live(k).filter(i => i.owner === n).length;
   const list = [...S.users].sort((a, b) => (a.role === 'admin' ? -1 : b.role === 'admin' ? 1 : a.name.localeCompare(b.name)));
   return `<div class="head"><h1>👑 Panel Admin <span class="hc">${S.users.length} akun</span></h1></div>
-  <p class="muted small">Admin bisa mengedit profil anggota, mengganti nickname, mengeluarkan anggota dari semua perangkat, mereset password, dan menghapus akun. Whisper tetap pribadi antara pengirim dan penerima.</p>
+  <p class="muted small">Admin bisa mengedit profil anggota, mengganti nickname & status, mengeluarkan anggota dari semua perangkat, mereset password, dan menghapus akun. Whisper tetap pribadi antara pengirim dan penerima.</p>
   <div class="card tbl-wrap"><table class="atbl"><thead><tr><th>User</th><th>Status</th><th>Bergabung</th><th>Reminder</th><th>Task</th><th>Cash</th><th>Pesan</th><th></th></tr></thead><tbody>
-  ${list.map(u => `<tr><td><span class="uc">${av(u.name)}<span><b>${esc(uname(u.name))}</b><small>@${esc(u.name)}${u.role === 'admin' ? ' · Admin' : ''}</small></span></span></td>
+  ${list.map(u => `<tr><td><span class="uc">${av(u.name)}<span><b>${esc(uname(u.name))}</b><small>@${esc(u.name)}${u.role === 'admin' ? ' · Admin' : ''}</small>${stLine(u.name)}</span></span></td>
     <td>${lastSeenText(u)}${u.reset ? '<br><small class="warn-t">password direset — login berikutnya membuat password baru</small>' : ''}</td><td>${u.created ? dtText(Date.parse(u.created) + S.skew) : ''}</td>
     <td>${count(u.name, 'reminder')}</td><td>${count(u.name, 'task')}</td><td>${count(u.name, 'cash')}</td><td>${count(u.name, 'msg')}</td>
-    <td class="acts">${u.role === 'admin' ? '<span class="muted small">Akun utama</span>' : `<button type="button" class="btn sm" data-a="admEdit" data-u="${esc(u.name)}">Edit</button><button type="button" class="btn sm" data-a="whisper" data-u="${esc(u.name)}">🤫</button><button type="button" class="btn sm" data-a="admKick" data-u="${esc(u.name)}">Keluarkan</button><button type="button" class="btn sm" data-a="admReset" data-u="${esc(u.name)}">Reset password</button><button type="button" class="btn sm danger" data-a="admDel" data-u="${esc(u.name)}">Hapus</button>`}</td></tr>`).join('')}
+    <td class="acts"><button type="button" class="btn sm" data-a="stEdit" data-u="${esc(u.name)}">🏷 Status</button>${u.role === 'admin' ? '<span class="muted small">Akun utama</span>' : `<button type="button" class="btn sm" data-a="admEdit" data-u="${esc(u.name)}">Edit</button><button type="button" class="btn sm" data-a="whisper" data-u="${esc(u.name)}">🤫</button><button type="button" class="btn sm" data-a="admKick" data-u="${esc(u.name)}">Keluarkan</button><button type="button" class="btn sm" data-a="admReset" data-u="${esc(u.name)}">Reset password</button><button type="button" class="btn sm danger" data-a="admDel" data-u="${esc(u.name)}">Hapus</button>`}</td></tr>`).join('')}
   </tbody></table></div>`;
 }
 function adminEditDialog(name) {
@@ -4056,6 +4090,7 @@ function adminEditDialog(name) {
     <div class="ed-bar"><b>Edit user</b><span class="sp"></span><button type="button" class="ib" data-a="close">✕</button></div>
     <div class="pf-top">${av(name, 'xl')}<div><b class="big">${esc(uname(name))}</b><div class="muted small">@${esc(name)}</div></div></div>
     <label>Nickname / nama tampilan<input id="adm-display" value="${esc(u.display || u.name)}" maxlength="40" required placeholder="Nama tampilan"></label>
+    <label>🏷 Status / jabatan<input id="adm-status" value="${esc(ustatus(name))}" maxlength="80" list="st-list" placeholder="mis. Admin Basecamp Bugel : SCP, PCP"></label>${stSuggest()}
     <label>Warna avatar<div class="swatches">${AV_COLORS.map(c => `<label class="sw"><input type="radio" name="adm-color" value="${c}" ${(u.color || ucolor(name)) === c ? 'checked' : ''}><i style="--c:${c}"></i></label>`).join('')}</div></label>
     <p class="err" id="adm-user-err"></p>
     <div class="dlg-f"><button type="button" class="btn" data-a="close">Batal</button><span class="sp"></span><button type="submit" class="btn primary">Simpan perubahan</button></div>
@@ -4071,10 +4106,13 @@ function profileDialog() {
   S.dlg = { type: 'profile' };
   const t = theme(), np = notifyPref(), u = S.me;
   openDlg(`<div class="dlg prof"><div class="ed-bar"><b>Profil</b><span class="sp"></span><button type="button" class="ib" data-a="close">✕</button></div>
-    <div class="pf-top">${av(u.name, 'xl')}<div><b class="big">${esc(uname(u.name))}</b><div class="muted small">@${esc(u.name)} · ${u.role === 'admin' ? 'Admin' : 'Anggota'} · bergabung ${u.created ? dShort(ymd(new Date(u.created))) : '—'}</div></div></div>
+    <div class="pf-top">${av(u.name, 'xl')}<div><b class="big">${esc(uname(u.name))}</b><div class="muted small">@${esc(u.name)} · ${u.role === 'admin' ? 'Admin' : 'Anggota'} · bergabung ${u.created ? dShort(ymd(new Date(u.created))) : '—'}</div>${stLine(u.name)}</div></div>
     <form id="pf-form" class="sect"><h3>Nama tampilan & warna</h3>
       <div class="row2"><input id="pf-disp" value="${esc(u.display || u.name)}" maxlength="40" placeholder="Nama tampilan"><button class="btn" type="submit">Simpan</button></div>
       <div class="swatches">${AV_COLORS.map(c => `<label class="sw"><input type="radio" name="pf-color" value="${c}" ${(u.color || ucolor(u.name)) === c ? 'checked' : ''}><i style="--c:${c}"></i></label>`).join('')}</div></form>
+    <form id="st-form" class="sect"><h3>🏷 Status</h3>
+      <div class="row2"><input id="st-txt" value="${esc(ustatus(u.name))}" maxlength="80" list="st-list" placeholder="mis. Admin Basecamp Bugel : SCP, PCP"><button class="btn" type="submit">Simpan</button></div>${stSuggest()}
+      <p class="muted small">Jabatan / lokasi / unit yang kamu pegang — tampil di daftar Users dan saat orang mengarahkan kursor ke avatarmu.</p></form>
     <form id="pw-form" class="sect"><h3>🔑 Ganti password</h3>
       <input id="pw-old" type="password" autocomplete="current-password" placeholder="Password lama" required>
       <div class="row2"><input id="pw-new" type="password" autocomplete="new-password" placeholder="Password baru (min. 4)" required><input id="pw-new2" type="password" autocomplete="new-password" placeholder="Ulangi password baru" required></div>
@@ -4225,6 +4263,7 @@ const A = {
   repPdf: () => reportPdf(), repXlsx: () => reportXlsx(), repPrint: () => reportPrint(),
   // admin
   admEdit: el => adminEditDialog(el.dataset.u),
+  stEdit: el => statusDialog(el.dataset.u),
   admKick: async el => { const n = el.dataset.u; if (await confirmDlg(`Keluarkan <b>${esc(uname(n))}</b> (@${esc(n)}) dari semua perangkat? User tetap dapat masuk kembali dengan passwordnya.`, 'Keluarkan')) {
     try { const r = await rpc('ahg_admin_kick', { p_token: S.token, p_target: n }); if (!r?.ok) throw new Error(r?.err || 'gagal'); toast(`<b>${esc(uname(n))}</b> telah dikeluarkan dari semua perangkat.`, 'info', null, 5000); ping(); syncNow(); }
     catch (e) { toast('Gagal mengeluarkan user: ' + esc(e.message), 'warn'); }
@@ -4384,6 +4423,10 @@ document.addEventListener('submit', async ev => {
     closeAll();
   } else if (f.id === 'pf-form') {
     try { const r = await rpc('ahg_profile', { p_token: S.token, p_display: $('#pf-disp').value, p_color: $('input[name=pf-color]:checked', f)?.value || '' }); if (r?.ok) { S.me = r.me; toast('Profil disimpan.', 'info', null, 2000); ping(); await syncNow(); render(); profileDialog(); } } catch (e) { toast('Gagal: ' + esc(e.message), 'warn'); }
+  } else if (f.id === 'st-form') {
+    const b = $('button[type=submit]', f); b.disabled = true;
+    try { const v = await saveStatus(S.me.name, $('#st-txt').value); toast(v ? 'Status disimpan.' : 'Status dihapus.', 'info', null, 2000); profileDialog(); }
+    catch (e) { b.disabled = false; toast('Gagal: ' + esc(e.message), 'warn'); }
   } else if (f.id === 'adm-user-form') {
     const name = f.dataset.u, display = $('#adm-display').value.trim(), color = $('input[name=adm-color]:checked', f)?.value || '', err = $('#adm-user-err');
     if (!display) { err.textContent = 'Nickname tidak boleh kosong.'; return; }
@@ -4391,6 +4434,7 @@ document.addEventListener('submit', async ev => {
     try {
       const r = await rpc('ahg_admin_profile', { p_token: S.token, p_target: name, p_display: display, p_color: color });
       if (!r?.ok) throw new Error({ auth: 'sesi admin tidak valid — logout lalu login lagi sebagai admin', protected: 'akun admin tidak bisa diubah di sini', display: 'nickname 1–40 karakter', color: 'warna tidak valid', not_found: 'user tidak ditemukan' }[r?.err] || r?.err || 'gagal');
+      const stv = $('#adm-status').value.replace(/\s+/g, ' ').trim(); if (stv !== ustatus(name)) await saveStatus(name, stv);
       closeAll(); toast(`Profil <b>${esc(name)}</b> diperbarui.`, 'info', null, 3000); ping(); await syncNow(); render();
     } catch (e) { b.disabled = false; b.textContent = 'Simpan perubahan'; err.textContent = 'Gagal: ' + e.message; }
   } else if (f.id === 'pw-form') {
