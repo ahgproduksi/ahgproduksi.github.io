@@ -990,6 +990,14 @@ dialog::backdrop{background:rgba(10,20,40,.35);backdrop-filter:blur(4px);-webkit
 /* 📑 export laporan */
 .lp-seg{align-self:flex-start}
 .lp-sum{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--soft);line-height:1.5}
+/* login: Masuk / Daftar akun (kode referral) */
+.lseg{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;border-radius:14px;background:color-mix(in srgb,var(--text) 6%,transparent);border:1px solid var(--line)}
+.lseg button{border:0;background:transparent;color:var(--muted);font:inherit;font-weight:700;padding:9px 6px;border-radius:10px;cursor:pointer}
+.lseg button.on{background:var(--card);color:var(--acc);box-shadow:0 2px 8px rgba(0,0,0,.1)}
+.lref{display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center}
+.wa-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:#25d366!important;border-color:#1ebe5b!important;color:#fff!important;font-weight:700;text-decoration:none;padding:10px 18px;width:100%}
+.wa-btn:hover{filter:brightness(1.05)}
+.adm-h{margin:22px 0 10px;font-size:18px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
 </style>
 </head>
 <body>
@@ -2614,7 +2622,7 @@ const LCH = {
 };
 
 // Virtual Work AHG — reminder, global chat (+ whisper), task (+ rutin mingguan) dan kasbon tim. Data di Supabase (proyek saku-yuk), sinkron real time.
-const BUILD = '20261026-151016';
+const BUILD = '20261026-183842';
 const SB_URL = 'https://herltzublcqpbgyxbbyp.supabase.co', SB_KEY = 'sb_publishable_FMSC0iqDRLsRXtvTtZX0Ow_piPi5bli'; // public key; tables closed, only ahg_* functions
 
 // ---------- helpers ----------
@@ -2672,7 +2680,7 @@ const VIEWS = { home: ['📊', 'Dashboard'], reminder: ['⏰', 'Reminder'], chat
 // ---------- state ----------
 const now0 = new Date();
 const S = {
-  token: '', me: null, users: [], status: {}, skew: 0, items: new Map(), seq: 0, queue: new Set(), loaded: false,
+  token: '', me: null, users: [], cmpUsers: [], status: {}, skew: 0, items: new Map(), seq: 0, queue: new Set(), loaded: false,
   view: 'reminder',
   rem: { mode: ['list', 'board', 'cal'].includes(LS.get('remMode')) ? LS.get('remMode') : 'list', pick: '', open: {}, cal: true, y: now0.getFullYear(), m: now0.getMonth(), sel: '', addDate: '', st: 'open', scope: 'all', who: '', sort: 'date' },
   chat: { conv: 'g', files: [], limit: 200, sending: false },
@@ -2760,8 +2768,10 @@ async function syncNow() {
       if (who !== S.token) return;
       if (!r?.ok) { if (r?.err === 'auth') return authLost(); throw new Error('server menolak'); }
       if (r.me) { S.skew = Date.now() - Date.parse(r.me.last_seen); S.me = r.me; }
-      const us = (r.users || []).filter(u => r.me?.role === 'admin' || u.role !== 'admin'); // admin presence stays hidden from users
+      const us = (r.users || []).filter(u => (r.me?.role === 'admin' || u.role !== 'admin') && u.grp !== 'cmp'); // admin presence stays hidden from users; CMP drivers live in /cmp
       if (JSON.stringify(us) !== JSON.stringify(S.users)) { S.users = us; changed = true; }
+      const cu = (r.users || []).filter(u => u.grp === 'cmp');
+      if (JSON.stringify(cu) !== JSON.stringify(S.cmpUsers)) { S.cmpUsers = cu; changed = true; }
       for (const x of r.rows || []) {
         const it = { id: x.id, kind: x.kind, owner: x.owner, to: x.to || null, data: x.data || {}, created: Number(x.created), updated: Number(x.updated), deleted: !!x.deleted, seq: Number(x.seq) };
         const cur = S.items.get(it.id);
@@ -2941,18 +2951,27 @@ function setTheme(p) { LS.set('theme', JSON.stringify({ ...theme(), ...p })); ap
 function savePref(p) { if (!S.me) return; const cur = pref(); if (cur) put({ ...cur, data: { ...cur.data, ...p } }, true); else create('pref', p); }
 
 // ---------- login ----------
-const LOGIN_ERR = { name: 'Nama pengguna 3–32 karakter: huruf kecil, angka, titik, garis bawah atau minus.', pass: 'Password minimal 4 karakter.', wrong: 'Password salah.', locked: 'Terlalu banyak percobaan salah. Coba lagi 15 menit lagi.' };
-async function login(name, pass, remember) {
+const LOGIN_ERR = { name: 'Nama pengguna 3–32 karakter: huruf kecil, angka, titik, garis bawah atau minus.', pass: 'Password minimal 4 karakter.', wrong: 'Password salah.', locked: 'Terlalu banyak percobaan salah. Coba lagi 15 menit lagi.',
+  noreg: 'Akun belum terdaftar. Pilih “Daftar akun” dan masukkan kode referral.', ref: 'Kode referral salah. Belum punya kode? Klik “Hubungi Admin”.', taken: 'Nama pengguna sudah dipakai — pilih nama lain, atau Masuk jika itu akunmu.', same: 'Ulangi password tidak sama.' };
+// referral: UNITAHG → /unit (Virtual Work), CMPAHG → /cmp (pencatatan kirim truck mixer); kode diperiksa di server (ahg_register)
+const WA_ADMIN = 'https://wa.me/6282299774825?text=' + encodeURIComponent('saya ingin mendaftar di Virtual Work AHG, kirimkan no referralnya.');
+const gPath = g => g === 'cmp' ? '/cmp/' : '/unit/';
+const here = () => location.pathname.replace(/index\.html$/, '');
+async function login(name, pass, remember, reg) {
   name = String(name || '').trim().toLowerCase();
   if (!/^[a-z0-9._-]{3,32}$/.test(name)) throw new Error(LOGIN_ERR.name);
   if ((pass || '').length < 4) throw new Error(LOGIN_ERR.pass);
-  const r = await rpc('ahg_login', { p_name: name, p_pass: pass }).catch(e => { throw new Error('Tidak bisa menghubungi server (' + e.message + ').'); });
-  if (!r?.ok) throw new Error(LOGIN_ERR[r?.err] || 'Gagal masuk.');
-  S.token = r.token; S.me = { ...r.me, fresh: true }; S.skew = Date.now() - Date.parse(r.me.last_seen);
-  const sess = JSON.stringify({ token: r.token, name: r.me.name });
+  if (reg && pass !== reg.pass2) throw new Error(LOGIN_ERR.same);
+  if (reg && !reg.ref.trim()) throw new Error('Isi kode referral. Belum punya kode? Klik “Hubungi Admin”.');
+  const r = await (reg ? rpc('ahg_register', { p_name: name, p_pass: pass, p_ref: reg.ref }) : rpc('ahg_login', { p_name: name, p_pass: pass })).catch(e => { throw new Error('Tidak bisa menghubungi server (' + e.message + ').'); });
+  if (!r?.ok) { if (r?.err === 'noreg') S.lmode = 'reg'; throw new Error(LOGIN_ERR[r?.err] || 'Gagal masuk.'); }
+  const grp = r.me.grp === 'cmp' ? 'cmp' : 'unit', sess = JSON.stringify({ token: r.token, name: r.me.name, grp });
   if (remember) { LS.set('session', sess); SS.del('session'); } else { SS.set('session', sess); LS.del('session'); }
   LS.set('lastuser', r.me.name);
-  start(r.new ? `Selamat datang, <b>${esc(r.me.name)}</b>! Akunmu sudah dibuat — ingat password-nya.` : '');
+  const msg = r.new ? `Selamat datang, <b>${esc(r.me.name)}</b>! Akunmu sudah dibuat — ingat password-nya.` : '';
+  if (here() !== gPath(grp)) { if (msg) SS.set('welcome', msg); location.replace(gPath(grp)); return; }
+  S.token = r.token; S.me = { ...r.me, fresh: true }; S.skew = Date.now() - Date.parse(r.me.last_seen);
+  start(msg);
 }
 function start(msg) {
   loadCache(); S.loaded = false; S.view = 'home'; S.chat.conv = 'g'; S.dlg = null;
@@ -2980,20 +2999,25 @@ function render() {
   if (!$('.shell')) renderShell();
   renderNav(); renderMain(); renderUsers(); showSync(); refreshDialog();
 }
-function renderLogin() {
-  const last = LS.get('lastuser') || '';
+function renderLogin(keep) {
+  const reg = S.lmode === 'reg', last = keep?.user ?? (reg ? '' : LS.get('lastuser') || '');
   app().innerHTML = `<div class="login"><form class="lcard" id="login-form" autocomplete="on">
     <div class="lbrand"><span class="ahg-logo big" role="img" aria-label="PT. Armada Hada Graha"></span><h1>Virtual Work AHG</h1><p class="muted">PT. Armada Hada Graha · ruang kerja tim</p></div>
+    <div class="lseg" role="tablist"><button type="button" role="tab" class="${reg ? '' : 'on'}" data-a="lMode" data-m="in">Masuk</button><button type="button" role="tab" class="${reg ? 'on' : ''}" data-a="lMode" data-m="reg">Daftar akun</button></div>
     <label>Nama pengguna<input id="l-user" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" value="${esc(last)}" placeholder="mis. budi" required></label>
-    <label>Password<span class="pw"><input id="l-pass" name="password" type="password" autocomplete="current-password" required><button type="button" class="ib" data-a="pwShow" title="Tampilkan">👁</button></span></label>
+    <label>Password<span class="pw"><input id="l-pass" name="password" type="password" autocomplete="${reg ? 'new-password' : 'current-password'}" value="${esc(keep?.pass || '')}" required><button type="button" class="ib" data-a="pwShow" title="Tampilkan">👁</button></span></label>
+    ${reg ? `<label>Ulangi password<input id="l-pass2" type="password" autocomplete="new-password" required></label>
+    <label>Kode referral<input id="l-ref" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Kode dari admin" required></label>` : ''}
     <label class="chk-l"><input type="checkbox" id="l-rem" checked> Tetap masuk di perangkat ini</label>
     <p class="err" id="l-err">${esc(S.loginMsg || '')}</p>
-    <button class="btn primary big" id="l-btn" type="submit">Masuk</button>
-    <p class="muted small">Belum punya akun? Ketik nama pengguna & password baru — akun dibuat otomatis saat pertama masuk.</p>
+    <button class="btn primary big" id="l-btn" type="submit">${reg ? 'Daftar & masuk' : 'Masuk'}</button>
+    ${reg ? `<div class="lref"><span class="muted small">Belum punya kode referral?</span><a class="btn wa-btn" href="${esc(WA_ADMIN)}" target="_blank" rel="noopener">${WA_SVG} Hubungi Admin</a></div>`
+      : `<p class="muted small">Belum punya akun? <a href="#" data-a="lMode" data-m="reg">Daftar akun</a> dengan kode referral dari admin.</p>`}
   </form></div>`;
   S.loginMsg = '';
   (last ? $('#l-pass') : $('#l-user')).focus();
 }
+const WA_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm0 18.2c-1.5 0-3-.4-4.3-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.3-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5c-.2 0-.4.1-.7.3-.2.3-.9.9-.9 2.2s.9 2.5 1 2.7c.1.2 1.8 2.8 4.4 3.9 1.6.7 2.3.8 3.1.6.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.2-1.2-.1-.1-.3-.2-.5-.3Z"/></svg>';
 const TOOLS_SVG = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M9 3.5h6A2 2 0 0 1 17 5.5V7h3a2 2 0 0 1 2 2v3.5h-7.5v-1h-5v1H2V9a2 2 0 0 1 2-2h3V5.5a2 2 0 0 1 2-2Zm0 2V7h6V5.5ZM2 14h7.5v1.5h5V14H22v4.5a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2Z"/></svg>';
 const CHAT_SVG = '<svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><path fill="currentColor" d="M12 3C6.5 3 2 6.6 2 11.1c0 2.5 1.4 4.7 3.6 6.2L4.8 21l4.2-2.3c.9.2 1.9.4 3 .4 5.5 0 10-3.6 10-8S17.5 3 12 3Z"/><circle cx="7.8" cy="11.1" r="1.35" fill="var(--acc)"/><circle cx="12" cy="11.1" r="1.35" fill="var(--acc)"/><circle cx="16.2" cy="11.1" r="1.35" fill="var(--acc)"/></svg>';
 const CLOSE_SVG = '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path stroke="currentColor" stroke-width="2.6" stroke-linecap="round" d="M6 6l12 12M18 6 6 18"/></svg>';
@@ -3109,9 +3133,10 @@ const TOOLS = [
   ['calc', 'Calc', 'Kalkulator & luas/volume', `<rect width='100' height='100' rx='24' fill='#e8590c'/><rect x='24' y='18' width='52' height='20' rx='5' fill='white'/><g fill='white'><circle cx='32' cy='54' r='6'/><circle cx='50' cy='54' r='6'/><circle cx='68' cy='54' r='6'/><circle cx='32' cy='72' r='6'/><circle cx='50' cy='72' r='6'/><circle cx='68' cy='72' r='6'/></g>`],
   ['notes', 'Notes', 'Catatan', `<rect width='100' height='100' rx='24' fill='#f0a020'/><path d='M30 30h40M30 50h40M30 70h24' fill='none' stroke='white' stroke-width='9' stroke-linecap='round'/>`],
 ];
+const CMP_TILE = `<rect width='100' height='100' rx='24' fill='#1f6fc0'/><path d='M14 66V44h30v22M44 52h18l12 14H44' fill='none' stroke='white' stroke-width='7' stroke-linejoin='round'/><circle cx='28' cy='70' r='8' fill='white'/><circle cx='64' cy='70' r='8' fill='white'/><path d='M20 34l26-10 6 14' fill='none' stroke='#ffd166' stroke-width='6' stroke-linecap='round'/>`;
 function vTools() {
   return `<div class="head"><h1>🧰 Tools <span class="hc">aplikasi pendukung</span></h1></div>
-  <div class="tl-grid">${TOOLS.map(([k, n, d, svg]) => `<a class="card tl" href="https://liemyo.github.io/${k}/" target="_blank" rel="noopener"><svg class="tl-ic" viewBox="0 0 100 100" aria-hidden="true">${svg}</svg><b>${n}</b><span class="muted small">${d}</span></a>`).join('')}</div>`;
+  <div class="tl-grid">${isAdmin() ? `<a class="card tl" href="/cmp/" target="_blank" rel="noopener"><svg class="tl-ic" viewBox="0 0 100 100" aria-hidden="true">${CMP_TILE}</svg><b>CMP</b><span class="muted small">Kirim truck mixer (admin)</span></a>` : ''}${TOOLS.map(([k, n, d, svg]) => `<a class="card tl" href="https://liemyo.github.io/${k}/" target="_blank" rel="noopener"><svg class="tl-ic" viewBox="0 0 100 100" aria-hidden="true">${svg}</svg><b>${n}</b><span class="muted small">${d}</span></a>`).join('')}</div>`;
 }
 function vUsersPage() {
   const on = S.users.filter(online).length;
@@ -4081,7 +4106,12 @@ function vAdmin() {
     <td>${lastSeenText(u)}${u.reset ? '<br><small class="warn-t">password direset — login berikutnya membuat password baru</small>' : ''}</td><td>${u.created ? dtText(Date.parse(u.created) + S.skew) : ''}</td>
     <td>${count(u.name, 'reminder')}</td><td>${count(u.name, 'task')}</td><td>${count(u.name, 'cash')}</td><td>${count(u.name, 'msg')}</td>
     <td class="acts"><button type="button" class="btn sm" data-a="stEdit" data-u="${esc(u.name)}">🏷 Status</button>${u.role === 'admin' ? '<span class="muted small">Akun utama</span>' : `<button type="button" class="btn sm" data-a="admEdit" data-u="${esc(u.name)}">Edit</button><button type="button" class="btn sm" data-a="whisper" data-u="${esc(u.name)}">🤫</button><button type="button" class="btn sm" data-a="admKick" data-u="${esc(u.name)}">Keluarkan</button><button type="button" class="btn sm" data-a="admReset" data-u="${esc(u.name)}">Reset password</button><button type="button" class="btn sm danger" data-a="admDel" data-u="${esc(u.name)}">Hapus</button>`}</td></tr>`).join('')}
-  </tbody></table></div>`;
+  </tbody></table></div>
+  <h2 class="adm-h">🚚 Akun CMP <span class="hc">${S.cmpUsers.length} akun · referral CMPAHG · <a href="/cmp/" target="_blank" rel="noopener">buka CMP</a></span></h2>
+  ${S.cmpUsers.length ? `<div class="card tbl-wrap"><table class="atbl"><thead><tr><th>User</th><th>Status</th><th>Bergabung</th><th></th></tr></thead><tbody>
+  ${S.cmpUsers.map(u => `<tr><td><b>${esc(u.display || u.name)}</b><small class="muted"> @${esc(u.name)}</small></td><td>${lastSeenText(u)}${u.reset ? '<br><small class="warn-t">password direset</small>' : ''}</td><td>${u.created ? dtText(Date.parse(u.created) + S.skew) : ''}</td>
+    <td class="acts"><button type="button" class="btn sm" data-a="admKick" data-u="${esc(u.name)}">Keluarkan</button><button type="button" class="btn sm" data-a="admReset" data-u="${esc(u.name)}">Reset password</button><button type="button" class="btn sm danger" data-a="admDel" data-u="${esc(u.name)}">Hapus</button></td></tr>`).join('')}
+  </tbody></table></div>` : '<p class="muted small">Belum ada akun CMP.</p>'}`;
 }
 function adminEditDialog(name) {
   const u = user(name); if (!u || u.role === 'admin') return;
@@ -4165,6 +4195,7 @@ async function viewFile(id, name, mime) {
 const A = {
   ...GA, ...GA2, ...NA, ...FA, ...HA, ...LA,
   pwShow() { const p = $('#l-pass'); p.type = p.type === 'password' ? 'text' : 'password'; },
+  lMode(el) { const keep = { user: $('#l-user')?.value || '', pass: $('#l-pass')?.value || '' }; S.lmode = el.dataset.m; renderLogin(keep); },
   go: el => { if (dlg().open) closeAll(); go(el.dataset.v); },
   profile: () => profileDialog(),
   logout: () => logout(),
@@ -4375,7 +4406,10 @@ document.addEventListener('submit', async ev => {
   const f = ev.target; if (f.closest('#cfm')) return; ev.preventDefault();
   if (f.id === 'login-form') {
     const b = $('#l-btn'); b.disabled = true; b.textContent = 'Masuk…'; $('#l-err').textContent = '';
-    try { await login($('#l-user').value, $('#l-pass').value, $('#l-rem').checked); } catch (e) { b.disabled = false; b.textContent = 'Masuk'; $('#l-err').textContent = e.message; $('#l-pass').select(); }
+    const reg = S.lmode === 'reg' ? { pass2: $('#l-pass2').value, ref: $('#l-ref').value } : null, label = b.textContent;
+    try { await login($('#l-user').value, $('#l-pass').value, $('#l-rem').checked, reg); }
+    catch (e) { if (!reg && S.lmode === 'reg') { renderLogin({ user: $('#l-user').value, pass: $('#l-pass').value }); $('#l-err').textContent = e.message; $('#l-pass2').focus(); return; }
+      b.disabled = false; b.textContent = label; $('#l-err').textContent = e.message; (reg && /referral/.test(e.message) ? $('#l-ref') : $('#l-pass')).select(); }
   } else if (f.id === 'rem-add') {
     const title = $('#ra-title').value.trim(); if (!title) return;
     const btn = $('#ra-btn'); let files = [];
@@ -4469,8 +4503,10 @@ window.addEventListener('focus', () => syncNow());
 function boot() {
   applyTheme(); checkUpdate();
   let s = null; try { s = JSON.parse(LS.get('session') || SS.get('session') || 'null'); } catch {}
-  if (s?.token && s?.name) { S.token = s.token; S.me = { name: s.name, role: s.name === 'admin' ? 'admin' : 'user', display: s.name }; start(); }
-  else render();
+  if (s?.token && s?.name) {
+    if (here() !== gPath(s.grp)) { location.replace(gPath(s.grp)); return; } // ahgproduksi.github.io → /unit atau /cmp sesuai referral
+    S.token = s.token; S.me = { name: s.name, role: s.name === 'admin' ? 'admin' : 'user', display: s.name }; start(SS.get('welcome') || ''); SS.del('welcome');
+  } else render();
 }
 boot();
 </script>
