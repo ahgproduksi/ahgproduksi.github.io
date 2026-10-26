@@ -998,6 +998,13 @@ dialog::backdrop{background:rgba(10,20,40,.35);backdrop-filter:blur(4px);-webkit
 .wa-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:#25d366!important;border-color:#1ebe5b!important;color:#fff!important;font-weight:700;text-decoration:none;padding:10px 18px;width:100%}
 .wa-btn:hover{filter:brightness(1.05)}
 .adm-h{margin:22px 0 10px;font-size:18px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+
+/* 🚚 Keberangkatan TM → /cmp/ (link, bukan view) */
+a.nav{text-decoration:none}
+.nv-cmp .lb{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.btn.cmp-go{text-decoration:none;border-color:color-mix(in srgb,#1f6fc0 45%,var(--g-edge,var(--line)));color:#1f6fc0}
+:root[data-theme="dark"] .btn.cmp-go{color:#7db4ee}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .btn.cmp-go{color:#7db4ee}}
 </style>
 </head>
 <body>
@@ -1062,8 +1069,8 @@ const PDF = {
   cw(c, bold) { const w = c >= 32 && c < 127 ? PDF.HW[c - 32] : c === 0x97 ? 1000 : c === 0x95 ? 350 : 556; return bold && !(c >= 48 && c <= 57) ? w * 1.06 : w; },
   width(str, size, bold) { return PDF.codes(str).reduce((a, c) => a + PDF.cw(c, bold), 0) * size / 1000; },
   fit(str, size, max, bold) { str = String(str ?? ''); if (PDF.width(str, size, bold) <= max) return str; let s = str; while (s.length && PDF.width(s + '…', size, bold) > max) s = s.slice(0, -1); return s + '…'; },
-  doc() {
-    const W = 595.28, H = 841.89; const pages = [], imgs = []; let cur = null;
+  doc(o = {}) { // o.landscape = A4 mendatar
+    const W = o.landscape ? 841.89 : 595.28, H = o.landscape ? 595.28 : 841.89; const pages = [], imgs = []; let cur = null;
     const col = c => c.map(v => (v / 255).toFixed(3)).join(' ');
     const d = {
       W, H, get page() { return pages.length; },
@@ -2155,7 +2162,7 @@ function vHome() {
   const pl = [...prod.values()].sort((a, c) => a.unit.localeCompare(c.unit)), pmax = Math.max(1, ...pl.map(p => p.v));
   const ons = S.users.filter(online), acts = notifs().slice(0, 4);
   const kpi = (k, label, val, sub, cls = '') => `<button type="button" class="card hk ${cls}" data-a="homeGo" data-k="${k}"><span class="hk-l">${label}</span><b>${val}</b><span class="hk-s">${sub}</span></button>`;
-  return `<div class="head"><h1>Selamat ${hi}, ${esc(uname(S.me.name).split(' ')[0])}</h1><div class="tools"><button type="button" class="btn" data-a="lpDlg" title="Laporan resmi PDF mingguan / bulanan / tahunan">📑 Export laporan</button><button type="button" class="btn primary" data-a="homeAdd">＋ Reminder baru</button></div></div>
+  return `<div class="head"><h1>Selamat ${hi}, ${esc(uname(S.me.name).split(' ')[0])}</h1><div class="tools"><a class="btn cmp-go" href="/cmp/" title="Keberangkatan truck mixer — CMP AHG">🚚 Keberangkatan TM</a><button type="button" class="btn" data-a="lpDlg" title="Laporan resmi PDF mingguan / bulanan / tahunan">📑 Export laporan</button><button type="button" class="btn primary" data-a="homeAdd">＋ Reminder baru</button></div></div>
   <div class="hkpi">
     ${kpi('late', 'Terlambat', b.late.length, b.late.length ? 'perlu tindakan' : 'aman 👍', b.late.length ? 'hot' : '')}
     ${kpi('today', 'Hari ini', b.today.length, 'reminder jatuh tempo')}
@@ -2622,7 +2629,7 @@ const LCH = {
 };
 
 // Virtual Work AHG — reminder, global chat (+ whisper), task (+ rutin mingguan) dan kasbon tim. Data di Supabase (proyek saku-yuk), sinkron real time.
-const BUILD = '20261026-183842';
+const BUILD = '20261026-191019';
 const SB_URL = 'https://herltzublcqpbgyxbbyp.supabase.co', SB_KEY = 'sb_publishable_FMSC0iqDRLsRXtvTtZX0Ow_piPi5bli'; // public key; tables closed, only ahg_* functions
 
 // ---------- helpers ----------
@@ -3055,7 +3062,7 @@ function renderNav() {
   const b = badges(), on = S.users.filter(online).length;
   const items = ['home', 'reminder', 'task', 'cash', 'unit', 'wait', 'users', ...(isAdmin() ? ['admin'] : [])];
   const n = { reminder: b.rem, chat: b.chat, task: b.task, wait: waitBadge(), users: on };
-  setHTML($('#side'), items.map(v => `<button type="button" class="nav ${S.view === v ? 'on' : ''} nv-${v}" data-a="go" data-v="${v}"><span class="ic">${VIEWS[v][0]}</span><span class="lb">${VIEWS[v][1]}</span>${n[v] ? `<span class="n ${v === 'chat' ? 'hot' : v === 'users' ? 'grn' : ''}">${n[v]}</span>` : ''}</button>`).join('')
+  setHTML($('#side'), items.map(v => (v === 'wait' ? CMP_NAV : '') + `<button type="button" class="nav ${S.view === v ? 'on' : ''} nv-${v}" data-a="go" data-v="${v}"><span class="ic">${VIEWS[v][0]}</span><span class="lb">${VIEWS[v][1]}</span>${n[v] ? `<span class="n ${v === 'chat' ? 'hot' : v === 'users' ? 'grn' : ''}">${n[v]}</span>` : ''}</button>`).join('')
     + `<div class="side-f"><span class="sync"></span><span class="muted small">versi ${BUILD}</span></div>`);
   setHTML($('#bnav'), ['home', 'reminder', 'task', 'cash', 'unit', 'wait', 'users'].map(v => `<button type="button" class="${S.view === v ? 'on' : ''}" data-a="go" data-v="${v}"><span class="ic">${VIEWS[v][0]}${n[v] && v !== 'users' ? `<i class="dot ${v === 'chat' ? 'hot' : ''}">${n[v] > 99 ? '99+' : n[v]}</i>` : ''}</span><span>${v === 'chat' ? 'Chat' : v === 'home' ? 'Home' : VIEWS[v][1]}</span></button>`).join(''));
   setHTML($('#me-btn'), `${av(S.me.name)}<span class="mn">${esc(uname(S.me.name))}${isAdmin() ? ' <small>Admin</small>' : ''}</span><span class="caret">▾</span>`);
@@ -3133,10 +3140,11 @@ const TOOLS = [
   ['calc', 'Calc', 'Kalkulator & luas/volume', `<rect width='100' height='100' rx='24' fill='#e8590c'/><rect x='24' y='18' width='52' height='20' rx='5' fill='white'/><g fill='white'><circle cx='32' cy='54' r='6'/><circle cx='50' cy='54' r='6'/><circle cx='68' cy='54' r='6'/><circle cx='32' cy='72' r='6'/><circle cx='50' cy='72' r='6'/><circle cx='68' cy='72' r='6'/></g>`],
   ['notes', 'Notes', 'Catatan', `<rect width='100' height='100' rx='24' fill='#f0a020'/><path d='M30 30h40M30 50h40M30 70h24' fill='none' stroke='white' stroke-width='9' stroke-linecap='round'/>`],
 ];
+const CMP_NAV = `<a class="nav nv-cmp" href="/cmp/" title="Keberangkatan truck mixer — CMP AHG"><span class="ic">🚚</span><span class="lb">Keberangkatan TM</span></a>`; // halaman CMP (/cmp/), satu login
 const CMP_TILE = `<rect width='100' height='100' rx='24' fill='#1f6fc0'/><path d='M14 66V44h30v22M44 52h18l12 14H44' fill='none' stroke='white' stroke-width='7' stroke-linejoin='round'/><circle cx='28' cy='70' r='8' fill='white'/><circle cx='64' cy='70' r='8' fill='white'/><path d='M20 34l26-10 6 14' fill='none' stroke='#ffd166' stroke-width='6' stroke-linecap='round'/>`;
 function vTools() {
   return `<div class="head"><h1>🧰 Tools <span class="hc">aplikasi pendukung</span></h1></div>
-  <div class="tl-grid">${isAdmin() ? `<a class="card tl" href="/cmp/" target="_blank" rel="noopener"><svg class="tl-ic" viewBox="0 0 100 100" aria-hidden="true">${CMP_TILE}</svg><b>CMP</b><span class="muted small">Kirim truck mixer (admin)</span></a>` : ''}${TOOLS.map(([k, n, d, svg]) => `<a class="card tl" href="https://liemyo.github.io/${k}/" target="_blank" rel="noopener"><svg class="tl-ic" viewBox="0 0 100 100" aria-hidden="true">${svg}</svg><b>${n}</b><span class="muted small">${d}</span></a>`).join('')}</div>`;
+  <div class="tl-grid"><a class="card tl" href="/cmp/"><svg class="tl-ic" viewBox="0 0 100 100" aria-hidden="true">${CMP_TILE}</svg><b>Keberangkatan TM</b><span class="muted small">CMP · kirim truck mixer</span></a>${TOOLS.map(([k, n, d, svg]) => `<a class="card tl" href="https://liemyo.github.io/${k}/" target="_blank" rel="noopener"><svg class="tl-ic" viewBox="0 0 100 100" aria-hidden="true">${svg}</svg><b>${n}</b><span class="muted small">${d}</span></a>`).join('')}</div>`;
 }
 function vUsersPage() {
   const on = S.users.filter(online).length;
