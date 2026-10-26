@@ -168,6 +168,10 @@ dialog::backdrop{background:rgba(10,20,40,.4);backdrop-filter:blur(4px);-webkit-
   .tbl td.acts{grid-column:1/-1;text-align:right;border-top:1px solid var(--line);padding-top:4px;margin-top:4px}
 }
 @media (max-width:380px){.ctab{font-size:13.5px}.fgrid2{grid-template-columns:1fr}}
+
+/* 💬 pesan WhatsApp */
+.btn.wa{color:#128c4a;border-color:color-mix(in srgb,#25d366 45%,var(--g-edge))}
+.wa-t{width:100%;box-sizing:border-box;min-height:240px;max-height:52dvh;resize:vertical;font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--text)}
 </style>
 </head>
 <body>
@@ -230,8 +234,8 @@ const PDF = {
   cw(c, bold) { const w = c >= 32 && c < 127 ? PDF.HW[c - 32] : c === 0x97 ? 1000 : c === 0x95 ? 350 : 556; return bold && !(c >= 48 && c <= 57) ? w * 1.06 : w; },
   width(str, size, bold) { return PDF.codes(str).reduce((a, c) => a + PDF.cw(c, bold), 0) * size / 1000; },
   fit(str, size, max, bold) { str = String(str ?? ''); if (PDF.width(str, size, bold) <= max) return str; let s = str; while (s.length && PDF.width(s + '…', size, bold) > max) s = s.slice(0, -1); return s + '…'; },
-  doc() {
-    const W = 595.28, H = 841.89; const pages = [], imgs = []; let cur = null;
+  doc(o = {}) { // o.landscape = A4 mendatar
+    const W = o.landscape ? 841.89 : 595.28, H = o.landscape ? 595.28 : 841.89; const pages = [], imgs = []; let cur = null;
     const col = c => c.map(v => (v / 255).toFixed(3)).join(' ');
     const d = {
       W, H, get page() { return pages.length; },
@@ -267,7 +271,7 @@ const PDF = {
 
 // CMP AHG — pencatatan kirim truck mixer (referral CMPAHG). Data di Supabase ahg-produksi (tabel ahg_cmp lewat fungsi cmp_*), sinkron tiap 4 dtk.
 // Tanggal & jam = waktu server saat SAVE/BERANGKAT. Hanya admin yang bisa mengedit / menghapus.
-const BUILD = '20261026-183842';
+const BUILD = '20261026-191019';
 const SB_URL = 'https://herltzublcqpbgyxbbyp.supabase.co', SB_KEY = 'sb_publishable_FMSC0iqDRLsRXtvTtZX0Ow_piPi5bli'; // public key; tables closed, only rpc
 
 // ---------- helpers ----------
@@ -445,7 +449,7 @@ function render() {
   if (!$('.cshell')) shell();
   $$('.ctab').forEach(b => b.classList.toggle('on', b.dataset.t === C.tab));
   setHTML($('#who'), C.me ? `<span class="who-n">${esc(C.me.display || C.me.name)}</span><small>@${esc(C.me.name)}${isAdmin() ? ' · Admin' : ''}</small>` : '');
-  $('#to-unit').hidden = !isAdmin();
+  $('#to-unit').hidden = !isAdmin() && C.grp === 'cmp'; // akun Unit masuk lewat menu Keberangkatan TM
   if (C.tab === 'input') vInput(); else vHist();
   showSync();
 }
@@ -455,7 +459,7 @@ function shell() {
       <span class="ahg-logo hdr" role="img" aria-label="PT. Armada Hada Graha"></span>
       <div class="ct"><b>CMP AHG</b><span>Pencatatan Kirim Truck Mixer</span></div>
       <span class="sp"></span>
-      <a class="btn sm" id="to-unit" href="/unit/" hidden title="Virtual Work (Unit)">🏭 Unit</a>
+      <a class="btn sm" id="to-unit" href="/unit/" hidden title="Kembali ke Virtual Work AHG">🏭 Virtual Work</a>
       <div class="who" id="who"></div>
       <button type="button" class="btn sm" data-a="logout" title="Keluar">Keluar</button>
     </header>
@@ -531,6 +535,8 @@ function vHist() {
       <div class="card hbar">
         <div class="hrow">
           <h1>📋 History Kirim</h1><span class="sp"></span>
+          <button type="button" class="btn sm wa" data-a="waDlg" title="Salin daftar kiriman sebagai pesan WhatsApp">💬 Salin WA</button>
+          <button type="button" class="btn sm" data-a="pdf" title="Rekap Pengiriman Truck Mixer - CMP (PDF)">📕 PDF</button>
           <button type="button" class="btn sm" data-a="xlsx">📗 Excel</button>
         </div>
         <div class="hrow">
@@ -674,6 +680,9 @@ const A = {
   fSet(el) { C.h.f[el.dataset.k] = el.dataset.v; const i = $('#hf-' + el.dataset.k); if (i) i.value = el.dataset.v; C.h.open = true; $('#h-f').hidden = false; vHist(); },
   more() { C.h.limit += 300; vHist(); },
   xlsx() { exportXlsx(); },
+  waDlg() { waDialog(); },
+  waCopy() { waCopy(); },
+  pdf(el) { rekapPdf(el); },
   edit(el) { editDialog(el.dataset.id); },
   del(el) { delRow(el.dataset.id); },
   close() { dlg().close(); },
@@ -748,6 +757,243 @@ function boot() {
   const w = SS.get('welcome'); if (w) { SS.del('welcome'); toast(w, 'ok', null, 9000); }
 }
 boot();
+
+// ---------- 💬 Salin WA + 📕 PDF "Rekap Pengiriman Truck Mixer - CMP" ----------
+// Sumber data = History Kirim sesuai periode, filter & kata kunci yang sedang aktif (filtered()).
+const MLONG = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+const dIndo = t => { const d = new Date(t); return `${d.getDate()} ${MLONG[d.getMonth()]} ${d.getFullYear()}`; };
+const dSlash = t => { const d = new Date(t); return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`; };
+const hDot = t => hm(t).replace(':', '.');
+const natCmp = (a, b) => String(a).localeCompare(String(b), 'id', { numeric: true, sensitivity: 'base' });
+function rkPeriod(rows) {
+  let [a, b] = periodRange(); b = addDays(b, -1);
+  const ts = rows.map(r => r.t);
+  if (a.getFullYear() < 2000) a = ts.length ? new Date(Math.min(...ts)) : new Date(srvNow());
+  if (b.getFullYear() > 9000) b = ts.length ? new Date(Math.max(...ts)) : new Date(srvNow());
+  return ymd(a) === ymd(b) ? `${DAYS[a.getDay()]}, ${dIndo(a)}` : `${dIndo(a)} s.d. ${dIndo(b)}`;
+}
+const rkFilters = () => [...Object.entries(C.h.f).filter(([, v]) => clean(v)).map(([k, v]) => `${FLAB[k]}: ${clean(v)}`), ...(clean(C.h.q) ? [`kata kunci "${clean(C.h.q)}"`] : [])];
+
+// ---------- WhatsApp ----------
+// 1. Patal Mayora, PT. Nirwana Tirta Engineering, Tono, TM 47, K-350, 6 M3, (26/10/2026 // 19.00 WIB).
+const RK = { asc: LS.get('cmp.waOrder') !== 'desc' };
+function waText() {
+  const rows = filtered().sort((x, y) => RK.asc ? x.t - y.t : y.t - x.t), fl = rkFilters();
+  return ['*REKAP PENGIRIMAN TRUCK MIXER - CMP*', 'PT. Armada Hada Graha', `Periode: ${rkPeriod(rows)}`, ...(fl.length ? [`Filter: ${fl.join(', ')}`] : []), '',
+    ...rows.map((r, i) => `${i + 1}. ${r.proyek}, ${r.customer}, ${r.sopir}, ${r.lambung}, ${r.mutu}, ${m3(r.kubik)} M3, (${dSlash(r.t)} // ${hDot(r.t)} WIB).`),
+    '', `Total: ${rows.length} rit, ${m3(rows.reduce((a, r) => a + r.kubik, 0))} M3`].join('\n');
+}
+function waDialog() {
+  const n = filtered().length; if (!n) { toast('Tidak ada kiriman pada periode / filter ini.', 'warn'); return; }
+  dlg().innerHTML = `<div class="dlgf">
+    <div class="dh"><b>💬 Pesan WhatsApp</b><span class="sp"></span><button type="button" class="ib" data-a="close">✕</button></div>
+    <p class="muted small">${n} kiriman sesuai periode &amp; filter History saat ini. Teks masih bisa diubah sebelum disalin.</p>
+    <label class="fld sm"><span>Urutan nomor</span><select id="wa-ord"><option value="asc">Keberangkatan paling awal → terakhir</option><option value="desc">Keberangkatan terbaru di atas</option></select></label>
+    <textarea id="wa-t" class="wa-t" rows="14" spellcheck="false"></textarea>
+    <div class="dact"><button type="button" class="btn" data-a="waOpen">Buka WhatsApp</button><span class="sp"></span><button type="button" class="btn primary" data-a="waCopy" id="wa-c">📋 Salin teks</button></div></div>`;
+  $('#wa-ord').value = RK.asc ? 'asc' : 'desc'; $('#wa-t').value = waText();
+  dlg().className = 'wide'; dlg().showModal(); $('#wa-c').focus();
+}
+async function waCopy() {
+  const t = $('#wa-t'), b = $('#wa-c'); if (!t) return; let ok = false;
+  try { await navigator.clipboard.writeText(t.value); ok = true; } catch { t.focus(); t.select(); try { ok = document.execCommand('copy'); } catch {} }
+  if (!b) return;
+  b.textContent = ok ? '✅ Tersalin — tempel di WhatsApp' : 'Gagal menyalin — tekan lama teks lalu Salin';
+  setTimeout(() => { if ($('#wa-c')) $('#wa-c').textContent = '📋 Salin teks'; }, 2500);
+}
+document.addEventListener('change', ev => {
+  if (ev.target.id !== 'wa-ord') return;
+  RK.asc = ev.target.value === 'asc'; LS.set('cmp.waOrder', RK.asc ? 'asc' : 'desc'); $('#wa-t').value = waText();
+});
+A.waOpen = () => { const t = $('#wa-t'); if (t) window.open('https://wa.me/?text=' + encodeURIComponent(t.value), '_blank', 'noopener'); };
+
+// ---------- PDF (A4 mendatar) ----------
+const RP = { W: 841.89, H: 595.28, ML: 40, CW: 841.89 - 80, top: 94, bot: 595.28 - 44 };
+const RC = { navy: [22, 52, 96], red: [214, 43, 43], grid: [178, 186, 198], line: [120, 130, 146], zebra: [245, 247, 251], sub: [234, 239, 247], tot: [219, 228, 241], text: [25, 25, 25], gray: [98, 98, 98], white: [255, 255, 255] };
+function rkWrap(s, size, max, bold) {
+  const out = []; let cur = '';
+  for (let w of String(s ?? '').split(/\s+/).filter(Boolean)) {
+    while (PDF.width(w, size, bold) > max && w.length > 1) { // kata yang lebih lebar dari kolom dipotong paksa
+      let i = w.length - 1; while (i > 1 && PDF.width(w.slice(0, i), size, bold) > max) i--;
+      if (cur) { out.push(cur); cur = ''; } out.push(w.slice(0, i)); w = w.slice(i);
+    }
+    const t = cur ? cur + ' ' + w : w;
+    if (!cur || PDF.width(t, size, bold) <= max) cur = t; else { out.push(cur); cur = w; }
+  }
+  if (cur || !out.length) out.push(cur);
+  return out;
+}
+const rkPage = R => { R.d.add(); R.y = RP.top; };
+const rkNeed = (R, h) => { if (R.y + h > RP.bot) rkPage(R); };
+
+// tabel: T = { cols: [[judul, lebar relatif, 'l'|'c'|'r']], rows: [{ c: [...], k: ''|'sub'|'tot', span: n kolom awal digabung, al }] }
+function rkMeasure(T, w) {
+  const m = { fs: 8, lh: 10.2, pv: 4.4, ph: 4.6 }, sum = T.cols.reduce((a, c) => a + c[1], 0);
+  m.w = w; m.ws = T.cols.map(c => c[1] / sum * w);
+  m.head = T.cols.map((c, i) => rkWrap(c[0], 7.6, m.ws[i] - 2 * m.ph, true));
+  m.hh = Math.max(...m.head.map(l => l.length)) * m.lh + 2 * m.pv;
+  m.rows = T.rows.map(r => { const segs = rkSegs(T, m, r).map(s => ({ ...s, L: rkWrap(s.v, m.fs, s.w - 2 * m.ph, !!r.k) })); return { segs, h: Math.max(...segs.map(s => s.L.length)) * m.lh + 2 * m.pv }; });
+  m.total = m.hh + m.rows.reduce((a, r) => a + r.h, 0);
+  return m;
+}
+function rkSegs(T, m, r) {
+  const sp = r.span || 1;
+  if (sp === 1) return T.cols.map((c, i) => ({ v: r.c[i], w: m.ws[i], a: c[2] }));
+  return [{ v: r.c[0], w: m.ws.slice(0, sp).reduce((a, v) => a + v, 0), a: r.al || 'l' }, ...T.cols.slice(sp).map((c, j) => ({ v: r.c[j + 1], w: m.ws[sp + j], a: c[2] }))];
+}
+function rkPaint(d, m, x, y, heads, rowsIdx) {
+  const top = y;
+  const put = (L, a, cx, cw, cy, ch, o) => { const off = (ch - L.length * m.lh) / 2;
+    L.forEach((l, j) => d.text(a === 'r' ? cx + cw - m.ph : a === 'c' ? cx + cw / 2 : cx + m.ph, cy + off + j * m.lh + (m.lh + m.fs * 0.7) / 2, l, o.size || m.fs, { color: o.color || RC.text, bold: o.bold, align: a === 'r' ? 'right' : a === 'c' ? 'center' : undefined })); };
+  d.rect(x, y, m.w, m.hh, RC.navy);
+  let cx = x; heads.forEach((L, i) => { put(L, 'c', cx, m.ws[i], y, m.hh, { bold: true, color: RC.white, size: 7.6 }); if (i) d.line(cx, y, cx, y + m.hh, [96, 120, 156], 0.4); cx += m.ws[i]; });
+  y += m.hh;
+  rowsIdx.forEach(([r, mr], n) => {
+    if (r.k === 'tot') d.rect(x, y, m.w, mr.h, RC.tot); else if (r.k === 'sub') d.rect(x, y, m.w, mr.h, RC.sub); else if (n % 2) d.rect(x, y, m.w, mr.h, RC.zebra);
+    let sx = x; mr.segs.forEach((s, j) => { put(s.L, s.a, sx, s.w, y, mr.h, { bold: !!r.k }); if (j) d.line(sx, y, sx, y + mr.h, RC.grid, 0.35); sx += s.w; });
+    y += mr.h; d.line(x, y, x + m.w, y, r.k === 'tot' ? RC.line : RC.grid, r.k === 'tot' ? 0.6 : 0.35);
+  });
+  d.box(x, top, m.w, y - top, RC.line, 0.7);
+  return y;
+}
+// tabel panjang mengalir ke halaman berikutnya; judul kolom diulang di tiap halaman
+function rkFlow(R, T, m = rkMeasure(T, RP.CW), x = RP.ML) {
+  let i = 0;
+  while (i < T.rows.length) {
+    let room = RP.bot - R.y - m.hh; const idx = [];
+    while (i < T.rows.length && (m.rows[i].h <= room || (!idx.length && R.y <= RP.top + 1))) { idx.push([T.rows[i], m.rows[i]]); room -= m.rows[i].h; i++; }
+    if (i < T.rows.length && T.rows.length - i === 1 && idx.length > 2 && T.rows[i].k === 'tot') { i--; idx.pop(); } // baris TOTAL tidak sendirian di halaman baru
+    if (!idx.length) { rkPage(R); continue; }
+    R.y = rkPaint(R.d, m, x, R.y, m.head, idx);
+    if (i < T.rows.length) rkPage(R);
+  }
+  R.y += 16;
+}
+function rkPara(R, text, size = 9.5) {
+  const lh = size * 1.55, L = rkWrap(text, size, RP.CW);
+  L.forEach((l, i) => { // rata kiri-kanan; baris terakhir paragraf rata kiri
+    if (R.y + lh > RP.bot) rkPage(R);
+    const base = R.y + size, words = l.split(' ');
+    if (i === L.length - 1 || words.length < 2) R.d.text(RP.ML, base, l, size, { color: RC.text });
+    else { const ww = words.map(w => PDF.width(w, size)), gap = (RP.CW - ww.reduce((a, v) => a + v, 0)) / (words.length - 1); let x = RP.ML;
+      words.forEach((w, j) => { R.d.text(x, base, w, size, { color: RC.text }); x += ww[j] + gap; }); }
+    R.y += lh;
+  });
+  R.y += 8;
+}
+function rkHead(R, text, need) {
+  rkNeed(R, 26 + need);
+  R.d.text(RP.ML, R.y + 11, text, 10, { bold: true, color: RC.navy });
+  R.d.line(RP.ML, R.y + 15.5, RP.ML + RP.CW, R.y + 15.5, RC.navy, 0.6);
+  R.y += 25;
+}
+const rkCap = (R, x, y, t) => R.d.text(x, y + 9, t, 8.4, { bold: true, color: RC.text });
+function rkKop(d, logo, i, n, per, printed) {
+  const { W, ML, CW } = RP, lh = 44, lw = lh * logo.w / logo.h, tx = ML + lw + 12;
+  d.rect(0, 0, W, 4, RC.navy);
+  d.image(ML, 20, lw, lh, logo);
+  d.text(tx, 38, 'PT. ARMADA HADA GRAHA', 16, { bold: true, color: RC.navy });
+  d.text(tx, 51, 'Concrete Mixing Plant (CMP)  -  Divisi Unit Produksi', 8.4, { color: RC.gray });
+  d.text(tx, 62, 'Pencatatan keberangkatan truck mixer dan pengiriman beton readymix', 8.4, { color: RC.gray });
+  d.text(ML + CW, 38, 'Rekap Pengiriman Truck Mixer - CMP', 9.5, { color: RC.navy, align: 'right' });
+  d.text(ML + CW, 51, `Periode: ${per}`, 8.4, { color: RC.gray, align: 'right' });
+  d.line(ML, 72, ML + CW, 72, RC.navy, 1.5); d.line(ML, 74.6, ML + CW, 74.6, RC.red, 0.5);
+  d.line(ML, RP.bot + 12, ML + CW, RP.bot + 12, RC.grid, 0.4);
+  d.text(ML, RP.bot + 22, 'Rekap Pengiriman Truck Mixer - CMP  |  PT. Armada Hada Graha', 7, { color: RC.gray });
+  d.text(ML + CW / 2, RP.bot + 22, printed, 7, { color: RC.gray, align: 'center' });
+  d.text(ML + CW, RP.bot + 22, `Halaman ${i} dari ${n}`, 7, { color: RC.gray, align: 'right' });
+}
+function rkGroup(rows, key, make) {
+  const g = new Map();
+  for (const r of rows) { const k = key(r); const a = g.get(k) || { ...make(r), n: 0, v: 0 }; a.n++; a.v += r.kubik; g.set(k, a); }
+  return [...g.values()];
+}
+function rkBuild(rows, per, logo) {
+  const now = srvNow(), printed = `Dicetak ${dIndo(now)} pukul ${hDot(now)} WIB`, fl = rkFilters();
+  const tot = rows.reduce((a, r) => a + r.kubik, 0), vtot = Math.round(tot * 100) / 100;
+  const proj = rkGroup(rows, r => norm(r.proyek) + '|' + norm(r.customer), r => ({ proyek: r.proyek, customer: r.customer })).sort((a, b) => b.v - a.v || natCmp(a.proyek, b.proyek));
+  const base = DEFAULTS.mutu.map(norm), mi = v => { const i = base.indexOf(norm(v)); return i < 0 ? 999 : i; };
+  const mutu = rkGroup(rows, r => norm(r.mutu), r => ({ mutu: r.mutu })).sort((a, b) => mi(a.mutu) - mi(b.mutu) || natCmp(a.mutu, b.mutu));
+  const truk = rkGroup(rows, r => norm(r.lambung) + '|' + norm(r.nopol) + '|' + norm(r.sopir), r => ({ lambung: r.lambung, nopol: r.nopol, sopir: r.sopir })).sort((a, b) => natCmp(a.lambung, b.lambung) || natCmp(a.sopir, b.sopir));
+  const nTm = new Set(rows.map(r => norm(r.lambung))).size;
+  const R = { d: PDF.doc({ landscape: true }), y: RP.top }, d = R.d;
+
+  // judul
+  d.text(RP.W / 2, R.y + 16, 'REKAP PENGIRIMAN TRUCK MIXER - CMP', 14, { bold: true, align: 'center', color: RC.text });
+  d.text(RP.W / 2, R.y + 33, `Periode: ${per}`, 9.5, { align: 'center', color: RC.text });
+  R.y += 50;
+  rkPara(R, `Bersama ini disampaikan rekapitulasi pengiriman beton readymix menggunakan truck mixer dari Concrete Mixing Plant (CMP) PT. Armada Hada Graha untuk periode ${per}. Data disusun dari pencatatan keberangkatan truck mixer pada sistem CMP AHG, dengan tanggal dan jam keberangkatan tercatat otomatis oleh sistem pada saat data disimpan${fl.length ? `, dan dibatasi pada ${fl.join(', ')}` : ''}. Pada periode tersebut tercatat ${rows.length} ritase pengiriman dengan total volume ${m3(tot)} m³, yang dikirim ke ${proj.length} proyek dengan ${mutu.length} jenis mutu beton dan melibatkan ${nTm} unit truck mixer.`);
+
+  // A. ringkasan per proyek + per mutu (berdampingan bila muat)
+  const vol = v => m3(v);
+  const TP = { cols: [['No', 3, 'c'], ['Nama Proyek', 22, 'l'], ['Customer', 20, 'l'], ['Ritase', 6, 'r'], ['Volume (m³)', 8, 'r']],
+    rows: [...proj.map((p, i) => ({ c: [i + 1, p.proyek, p.customer, p.n, vol(p.v)] })), { c: ['Jumlah', rows.length, vol(vtot)], k: 'tot', span: 3, al: 'r' }] };
+  const TM = { cols: [['No', 3, 'c'], ['Mutu Beton', 11, 'l'], ['Ritase', 6, 'r'], ['Volume (m³)', 8, 'r'], ['Porsi', 6, 'r']],
+    rows: [...mutu.map((p, i) => ({ c: [i + 1, p.mutu, p.n, vol(p.v), tot ? (p.v / tot * 100).toLocaleString('id-ID', { maximumFractionDigits: 1 }) + '%' : '-'] })), { c: ['Jumlah', rows.length, vol(vtot), '100%'], k: 'tot', span: 2, al: 'r' }] };
+  const gap = 18, wl = (RP.CW - gap) * 0.6, wr = RP.CW - gap - wl, mp = rkMeasure(TP, wl), mm = rkMeasure(TM, wr), hPair = 14 + Math.max(mp.total, mm.total);
+  rkHead(R, 'A.  RINGKASAN PER PROYEK DAN MUTU BETON', Math.min(hPair, 120));
+  if (R.y + hPair <= RP.bot) {
+    rkCap(R, RP.ML, R.y, 'Tabel 1. Rekapitulasi per proyek'); rkCap(R, RP.ML + wl + gap, R.y, 'Tabel 2. Rekapitulasi per mutu beton');
+    const y0 = R.y + 14, y1 = rkPaint(d, mp, RP.ML, y0, mp.head, TP.rows.map((r, i) => [r, mp.rows[i]])), y2 = rkPaint(d, mm, RP.ML + wl + gap, y0, mm.head, TM.rows.map((r, i) => [r, mm.rows[i]]));
+    R.y = Math.max(y1, y2) + 16;
+  } else {
+    rkCap(R, RP.ML, R.y, 'Tabel 1. Rekapitulasi per proyek'); R.y += 14; rkFlow(R, TP);
+    rkNeed(R, 60); rkCap(R, RP.ML, R.y, 'Tabel 2. Rekapitulasi per mutu beton'); R.y += 14; rkFlow(R, TM, rkMeasure(TM, wl + 60));
+  }
+
+  // B. per truck mixer & sopir
+  const TT = { cols: [['No', 3, 'c'], ['No. Lambung', 9, 'l'], ['No. Polisi', 10, 'l'], ['Sopir', 18, 'l'], ['Ritase', 6, 'r'], ['Volume (m³)', 8, 'r']],
+    rows: [...truk.map((t, i) => ({ c: [i + 1, t.lambung, t.nopol, t.sopir, t.n, vol(t.v)] })), { c: ['Jumlah', rows.length, vol(vtot)], k: 'tot', span: 4, al: 'r' }] };
+  rkHead(R, 'B.  REKAPITULASI PER TRUCK MIXER DAN SOPIR', 70);
+  rkCap(R, RP.ML, R.y, 'Tabel 3. Ritase dan volume per truck mixer'); R.y += 14; rkFlow(R, TT, rkMeasure(TT, wl));
+
+  // C. rincian (urut waktu keberangkatan, subtotal per hari bila lebih dari satu hari)
+  const TD = { cols: [['No', 3, 'c'], ['Tanggal', 7, 'c'], ['Jam', 4.4, 'c'], ['Nama Proyek', 17, 'l'], ['Customer', 16, 'l'], ['No. Lambung', 6.6, 'l'], ['No. Polisi', 7.6, 'l'], ['Sopir', 10, 'l'], ['Mutu', 5.8, 'c'], ['Volume (m³)', 6.6, 'r']], rows: [] };
+  const days = new Map(); for (const r of rows) { const k = ymd(new Date(r.t)); if (!days.has(k)) days.set(k, []); days.get(k).push(r); }
+  let no = 0;
+  for (const list of days.values()) {
+    for (const r of list) TD.rows.push({ c: [++no, dSlash(r.t), hDot(r.t), r.proyek, r.customer, r.lambung, r.nopol, r.sopir, r.mutu, vol(r.kubik)] });
+    if (days.size > 1) TD.rows.push({ c: [`Jumlah ${DAYS[new Date(list[0].t).getDay()]}, ${dIndo(list[0].t)}  -  ${list.length} ritase`, vol(list.reduce((a, r) => a + r.kubik, 0))], k: 'sub', span: 9, al: 'r' });
+  }
+  TD.rows.push({ c: [`TOTAL  -  ${rows.length} ritase`, vol(vtot)], k: 'tot', span: 9, al: 'r' });
+  rkHead(R, 'C.  RINCIAN PENGIRIMAN', 80);
+  rkCap(R, RP.ML, R.y, 'Tabel 4. Rincian keberangkatan truck mixer (urut waktu keberangkatan)'); R.y += 14; rkFlow(R, TD);
+
+  // penutup + tanda tangan
+  rkNeed(R, 40 + 130);
+  rkPara(R, 'Demikian rekapitulasi pengiriman truck mixer ini disusun berdasarkan data yang tercatat pada sistem CMP AHG, untuk dapat dipergunakan sebagaimana mestinya. Apabila terdapat perbedaan dengan dokumen surat jalan atau tiket pengiriman di lapangan, mohon segera dikonfirmasikan kepada admin CMP untuk dilakukan pemeriksaan dan koreksi data.');
+  rkNeed(R, 130);
+  d.text(RP.ML + RP.CW, R.y + 8, `Dicetak pada tanggal ${dIndo(now)}`, 9, { align: 'right', color: RC.text });
+  const cw = RP.CW / 3, me = C.me?.display || C.me?.name || '';
+  [['Dibuat oleh,', me], ['Diperiksa oleh,', ''], ['Mengetahui,', '']].forEach(([h, n], j) => { const cx = RP.ML + cw * j + cw / 2, y = R.y;
+    d.text(cx, y + 30, h, 9, { align: 'center', color: RC.text });
+    if (n) { const w = PDF.width(n, 9, true); d.text(cx, y + 94, n, 9, { bold: true, align: 'center', color: RC.text }); d.line(cx - w / 2 - 6, y + 97, cx + w / 2 + 6, y + 97, RC.text, 0.6); }
+    else d.line(cx - 66, y + 97, cx + 66, y + 97, RC.text, 0.6);
+    d.text(cx, y + 109, 'Jabatan: ..............................', 8, { align: 'center', color: RC.gray }); });
+  R.y += 124;
+
+  d.eachPage((i, n) => rkKop(d, logo, i, n, per, printed));
+  return d;
+}
+async function rkLogo() {
+  if (rkLogo.v) return rkLogo.v;
+  const e = $('.ahg-logo'), uri = e ? getComputedStyle(e).backgroundImage.replace(/^url\(["']?|["']?\)$/g, '') : '';
+  const img = new Image(); await new Promise((ok, no) => { img.onload = ok; img.onerror = () => no(new Error('logo tidak terbaca')); img.src = uri; });
+  const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
+  const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(img, 0, 0);
+  return rkLogo.v = { w: c.width, h: c.height, jpg: atob(c.toDataURL('image/jpeg', 0.95).split(',')[1]) };
+}
+async function rekapPdf(btn) {
+  const rows = filtered().sort((a, b) => a.t - b.t); if (!rows.length) { toast('Tidak ada kiriman pada periode / filter ini.', 'warn'); return; }
+  const t0 = btn.textContent; btn.disabled = true; btn.textContent = '⏳ Menyusun…';
+  try {
+    const d = rkBuild(rows, rkPeriod(rows), await rkLogo()), a = ymd(new Date(rows[0].t)), b = ymd(new Date(rows[rows.length - 1].t));
+    const url = URL.createObjectURL(new Blob([d.build()], { type: 'application/pdf' }));
+    const el = document.createElement('a'); el.href = url; el.download = `Rekap-Pengiriman-Truck-Mixer-CMP-${a}${b !== a ? '_sd_' + b : ''}.pdf`; document.body.appendChild(el); el.click(); el.remove(); setTimeout(() => URL.revokeObjectURL(url), 10000);
+    toast(`📕 Rekap PDF diunduh (${d.page} halaman, ${rows.length} rit).`, 'ok', null, 3500);
+  } catch (e) { console.error(e); toast('Gagal menyusun PDF: ' + esc(e.message), 'warn'); }
+  finally { btn.disabled = false; btn.textContent = t0; }
+}
 </script>
 </body>
 </html>
