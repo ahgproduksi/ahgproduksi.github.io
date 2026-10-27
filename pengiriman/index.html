@@ -284,7 +284,7 @@ const PDF = {
 // Pengiriman AHG (ahgproduksi.github.io/pengiriman, dulu /cmp) — pencatatan keberangkatan pengiriman produksi per kategori CMP/AMP/SCP/PCP
 // (referral CMPAHG). Data di Supabase ahg-produksi (tabel ahg_cmp lewat fungsi cmp_*; kolom mutu = spesifikasi, kubik = volume), sinkron tiap 4 dtk.
 // Tanggal & jam = waktu server saat SAVE/BERANGKAT. Hanya admin yang bisa mengedit / menghapus.
-const BUILD = '20261026-200933';
+const BUILD = '20261027-225554';
 const SB_URL = 'https://herltzublcqpbgyxbbyp.supabase.co', SB_KEY = 'sb_publishable_FMSC0iqDRLsRXtvTtZX0Ow_piPi5bli'; // public key; tables closed, only rpc
 
 // ---------- helpers ----------
@@ -850,20 +850,30 @@ function rkPeriod(rows) {
 const rkFilters = () => [...(C.h.kat ? [`kategori ${C.h.kat}`] : []), ...Object.entries(C.h.f).filter(([, v]) => clean(v)).map(([k, v]) => `${FLAB[k]}: ${clean(v)}`), ...(clean(C.h.q) ? [`kata kunci "${clean(C.h.q)}"`] : [])];
 
 // ---------- WhatsApp ----------
-// 1. Patal Mayora, PT. Nirwana Tirta Engineering, Tono, TM 47, K-350, 6 M3, (26/10/2026 // 19.00 WIB).
+// Dikelompokkan per tanggal + customer + proyek + kategori + spesifikasi, volume kumulatif per kelompok:
+// PT. Adiputra Sri Rejeki - SPBE Soropadan
+// [CMP] // K-300 // (27/10/2026)
+// 1. TM 50 (Eko) - 6m³ - 6m³ (09.06)
 const RK = { asc: LS.get('cmp.waOrder') !== 'desc' };
+const waVol = (n, kat) => KATS[kat].sat === 'm³' ? `${m3(n)}m³` : `${m3(n)} ${KATS[kat].sat}`;
 function waText() {
-  const rows = filtered().sort((x, y) => RK.asc ? x.t - y.t : y.t - x.t), fl = rkFilters(), kt = katTotals(rows), multi = kt.length > 1;
-  return [`*${kt.length === 1 ? rkTitle(kt[0][0]) : 'REKAP PENGIRIMAN PRODUKSI'}*`, 'PT. Armada Hada Graha', `Periode: ${rkPeriod(rows)}`, ...(fl.length ? [`Filter: ${fl.join(', ')}`] : []), '',
-    ...rows.map((r, i) => `${i + 1}. ${multi ? r.kat + ', ' : ''}${r.proyek}, ${r.customer}, ${r.sopir}, ${r.lambung}, ${r.mutu}, ${m3(r.kubik)} ${KATS[r.kat].satWA}, (${dSlash(r.t)} // ${hDot(r.t)} WIB).`),
-    '', `Total: ${rows.length} rit, ${kt.map(([k, n, v]) => (multi ? `${k} ${n} rit ` : '') + m3(v) + ' ' + KATS[k].satWA).join(', ')}`].join('\n');
+  const groups = new Map();
+  for (const r of filtered().sort((x, y) => x.t - y.t)) {
+    const key = [ymd(new Date(r.t)), norm(r.customer), norm(r.proyek), r.kat, norm(r.mutu)].join('|');
+    if (!groups.has(key)) groups.set(key, []); groups.get(key).push(r);
+  }
+  const list = [...groups.values()]; if (!RK.asc) list.reverse();
+  return list.map(g => { const f = g[0]; let cum = 0;
+    return [`${f.customer} - ${f.proyek}`, `[${f.kat}] // ${f.mutu} // (${dSlash(f.t)})`,
+      ...g.map((r, i) => `${i + 1}. ${r.lambung} (${r.sopir}) - ${waVol(r.kubik, r.kat)} - ${waVol(cum += r.kubik, r.kat)} (${hDot(r.t)})`)].join('\n');
+  }).join('\n\n');
 }
 function waDialog() {
   const n = filtered().length; if (!n) { toast('Tidak ada kiriman pada periode / filter ini.', 'warn'); return; }
   dlg().innerHTML = `<div class="dlgf">
     <div class="dh"><b>💬 Pesan WhatsApp</b><span class="sp"></span><button type="button" class="ib" data-a="close">✕</button></div>
     <p class="muted small">${n} kiriman sesuai periode &amp; filter History saat ini. Teks masih bisa diubah sebelum disalin.</p>
-    <label class="fld sm"><span>Urutan nomor</span><select id="wa-ord"><option value="asc">Keberangkatan paling awal → terakhir</option><option value="desc">Keberangkatan terbaru di atas</option></select></label>
+    <label class="fld sm"><span>Urutan kelompok</span><select id="wa-ord"><option value="asc">Kiriman paling awal di atas</option><option value="desc">Kiriman terbaru di atas</option></select></label>
     <textarea id="wa-t" class="wa-t" rows="14" spellcheck="false"></textarea>
     <div class="dact"><button type="button" class="btn" data-a="waOpen">Buka WhatsApp</button><span class="sp"></span><button type="button" class="btn primary" data-a="waCopy" id="wa-c">📋 Salin teks</button></div></div>`;
   $('#wa-ord').value = RK.asc ? 'asc' : 'desc'; $('#wa-t').value = waText();
