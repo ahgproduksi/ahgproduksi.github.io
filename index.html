@@ -2629,10 +2629,10 @@ const LCH = {
 };
 
 // Virtual Work AHG — reminder, global chat (+ whisper), task (+ rutin mingguan) dan kasbon tim. Data di Supabase (proyek ahg-produksi), sinkron real time.
-const BUILD = '20261028-074755';
+const BUILD = '20261028-092941';
 const SB_URL = 'https://herltzublcqpbgyxbbyp.supabase.co', SB_KEY = 'sb_publishable_FMSC0iqDRLsRXtvTtZX0Ow_piPi5bli'; // public key; tables closed, only ahg_* functions
 // File → Supabase Storage (bucket privat ahg-files, proyek ini) lewat Edge Function ahg-file: cek login, beri tautan unggah/unduh bertanda tangan.
-const ST_URL = SB_URL + '/functions/v1/ahg-file', ST_QUOTA = 943718400; // 900 MiB dari 1 GB gratis (sama dengan ahg_file_quota() di server)
+const ST_URL = SB_URL + '/functions/v1/ahg-file', ST_QUOTA = 644245094; // 60% dari 1 GB gratis, 40% sisanya untuk saku-yuk (sama dengan ahg_file_quota() di server)
 
 // ---------- helpers ----------
 const $ = (s, r = document) => r.querySelector(s);
