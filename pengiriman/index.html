@@ -87,7 +87,7 @@ main{flex:1}
 .fact .go{font-size:17px;padding:14px 22px;border-radius:14px}
 .lcard2{margin-top:14px;padding:14px 16px}
 .lh{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px}
-.lrow{display:grid;grid-template-columns:auto auto 1fr auto;gap:4px 12px;align-items:baseline;padding:8px 6px;border-top:1px solid var(--line)}
+.lrow{display:grid;grid-template-columns:auto auto 1fr auto auto;gap:4px 12px;align-items:baseline;padding:8px 6px;border-top:1px solid var(--line)}
 .lrow.new{background:color-mix(in srgb,#22c55e 12%,transparent);border-radius:10px}
 .lt{font-variant-numeric:tabular-nums}.ld{color:var(--muted);font-size:13px}.lk{color:var(--muted);font-size:13px;white-space:nowrap}
 .lx{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -120,6 +120,7 @@ main{flex:1}
 .tm{font-weight:800;font-variant-numeric:tabular-nums}.kb{font-weight:800;font-variant-numeric:tabular-nums}
 .tmno{color:var(--acc)}
 .mt{display:inline-block;padding:1px 8px;border-radius:99px;background:color-mix(in srgb,var(--ahg-red) 12%,transparent);color:color-mix(in srgb,var(--ahg-red) 85%,var(--text));font-weight:700;font-size:12.5px;white-space:nowrap}
+.ro{padding:10px 0;font-weight:600}.lrow .ib{align-self:center;padding:2px 6px}
 .ow{color:var(--muted);font-size:13px}.ow small{display:block;color:var(--warn)}
 .acts{white-space:nowrap;text-align:right}
 .ib.del:hover{background:color-mix(in srgb,var(--red) 15%,transparent)}
@@ -148,7 +149,7 @@ dialog::backdrop{background:rgba(10,20,40,.4);backdrop-filter:blur(4px);-webkit-
   .fcard{padding:16px}
   .fh{flex-direction:column;align-items:stretch}.clk{align-items:flex-start;text-align:left}
   .fact .go{flex:1;justify-content:center}
-  .lrow{grid-template-columns:auto 1fr auto}.ld{display:none}
+  .lrow{grid-template-columns:auto 1fr auto auto}.ld{display:none}
   .hq{min-width:0;flex-basis:100%;order:3}
   .fgrid2{grid-template-columns:1fr 1fr;gap:8px}
   /* tabel → kartu */
@@ -165,7 +166,7 @@ dialog::backdrop{background:rgba(10,20,40,.4);backdrop-filter:blur(4px);-webkit-
   .tbl td[data-l="No. Lambung"],.tbl td[data-l="No. Polisi"],.tbl td[data-l="Sopir"],.tbl td[data-l="Dicatat"]{grid-column:2/4;font-size:13px}
   .tbl td[data-l="No. Polisi"]::before,.tbl td[data-l="Sopir"]::before{content:attr(data-l) ': ';color:var(--muted)}
   .tbl td[data-l="Mutu"]{grid-column:3;grid-row:2;text-align:right}
-  .tbl td.acts{grid-column:1/-1;text-align:right;border-top:1px solid var(--line);padding-top:4px;margin-top:4px}
+  .tbl td.acts:empty{display:none}.tbl td.acts{grid-column:1/-1;text-align:right;border-top:1px solid var(--line);padding-top:4px;margin-top:4px}
 }
 @media (max-width:380px){.ctab{font-size:13.5px}.fgrid2{grid-template-columns:1fr}}
 
@@ -283,8 +284,9 @@ const PDF = {
 
 // Pengiriman AHG (ahgproduksi.github.io/pengiriman, dulu /cmp) — pencatatan keberangkatan pengiriman produksi per kategori CMP/AMP/SCP/PCP
 // (referral CMPAHG). Data di Supabase ahg-produksi (tabel ahg_cmp lewat fungsi cmp_*; kolom mutu = spesifikasi, kubik = volume), sinkron tiap 4 dtk.
-// Tanggal & jam = waktu server saat SAVE/BERANGKAT. Hanya admin yang bisa mengedit / menghapus.
-const BUILD = '20261028-095858';
+// Tanggal & jam = waktu server saat SAVE/BERANGKAT. Yang menginput boleh mengedit kirimannya sendiri maks. 24 jam sejak disimpan
+// (tanggal & jam tetap); admin bisa mengedit semua + menghapus.
+const BUILD = '20261028-121236';
 const SB_URL = 'https://herltzublcqpbgyxbbyp.supabase.co', SB_KEY = 'sb_publishable_FMSC0iqDRLsRXtvTtZX0Ow_piPi5bli'; // public key; tables closed, only rpc
 
 // ---------- helpers ----------
@@ -358,6 +360,9 @@ const C = {
   sync: { busy: false, at: 0, err: '' },
 };
 const isAdmin = () => C.me?.role === 'admin';
+const EDIT_MS = 24 * 3600e3; // batas edit pemilik sejak disimpan (server: cmp_edit, kolom created)
+const editUntil = r => (r.created || r.t) + EDIT_MS;
+const canEdit = r => isAdmin() || (r.owner === C.me?.name && srvNow() < editUntil(r));
 const live = () => [...C.rows.values()].filter(r => !r.deleted);
 const srvNow = () => Date.now() - C.skew;
 
@@ -375,7 +380,7 @@ const cacheKey = () => 'cmp.c.' + (C.me?.name || '');
 function saveCache() { try { localStorage.setItem('ahg.' + cacheKey(), JSON.stringify({ seq: C.seq, rows: live() })); } catch {} }
 function loadCache() { const c = jget(cacheKey(), null); if (!c) return; for (const r of c.rows || []) C.rows.set(r.id, r); C.seq = Number(c.seq || 0); }
 function takeRow(x) {
-  const r = { ...x, id: Number(x.id), seq: Number(x.seq), kubik: Number(x.kubik), kat: katOf(x.kat), t: x.at ? Date.parse(x.at) : 0 };
+  const r = { ...x, id: Number(x.id), seq: Number(x.seq), kubik: Number(x.kubik), kat: katOf(x.kat), t: x.at ? Date.parse(x.at) : 0, created: x.created ? Date.parse(x.created) : 0 };
   if (r.deleted) C.rows.delete(r.id); else C.rows.set(r.id, r);
   C.seq = Math.max(C.seq, r.seq);
 }
@@ -543,7 +548,7 @@ function lastHTML() {
   const mine = live().filter(r => r.owner === C.me?.name).sort((a, b) => b.t - a.t).slice(0, 5);
   if (!mine.length) return '';
   return `<div class="card lcard2"><div class="lh"><b>Kiriman terakhir saya</b><button type="button" class="btn sm" data-a="tab" data-t="hist">Lihat history →</button></div>
-    ${mine.map(r => `<div class="lrow ${C.last === r.id ? 'new' : ''}"><b class="lt">${hm(r.t)}</b><span class="ld">${esc(dShort(r.t))}</span><span class="lx"><span class="kb-${r.kat} kbadge">${r.kat}</span> <b>${esc(r.lambung)}</b> · ${esc(r.nopol)} · ${esc(r.proyek)}</span><span class="lk">${vol(r.kubik, r.kat)} · ${esc(r.mutu)}</span></div>`).join('')}</div>`;
+    ${mine.map(r => `<div class="lrow ${C.last === r.id ? 'new' : ''}"><b class="lt">${hm(r.t)}</b><span class="ld">${esc(dShort(r.t))}</span><span class="lx"><span class="kb-${r.kat} kbadge">${r.kat}</span> <b>${esc(r.lambung)}</b> · ${esc(r.nopol)} · ${esc(r.proyek)}</span><span class="lk">${vol(r.kubik, r.kat)} · ${esc(r.mutu)}</span>${canEdit(r) ? editBtn(r) : '<span></span>'}</div>`).join('')}</div>`;
 }
 const dShort = t => { const d = new Date(t); return `${d.getDate()} ${MSH[d.getMonth()]}`; };
 
@@ -618,11 +623,13 @@ function vHist() {
   const shown = rows.slice(0, h.limit), groups = new Map();
   for (const r of shown) { const k = ymd(new Date(r.t)); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); }
   const day = k => rows.filter(r => ymd(new Date(r.t)) === k);
-  setHTML($('#h-list'), [...groups].map(([k, list]) => { const all = day(k); return `<section class="hday"><div class="hd"><b>${dLong(list[0].t)}</b><span>${all.length} rit · ${katTotals(all).map(([kk, , v]) => (katN > 1 ? kk + ' ' : '') + vol(v, kk)).join(' · ')}</span></div>
-    <div class="card tbl"><table><thead><tr><th>Jam</th><th>Kategori</th><th>Proyek</th><th>Customer</th><th>No. Lambung</th><th>No. Polisi</th><th>Sopir</th><th>Spesifikasi</th><th class="r">Volume</th><th>Dicatat</th>${isAdmin() ? '<th></th>' : ''}</tr></thead><tbody>
-    ${list.map(r => `<tr class="${C.last === r.id ? 'new' : ''}"><td data-l="Jam" class="tm">${hm(r.t)}</td><td data-l="Kategori"><span class="kb-${r.kat} kbadge" title="${esc(KATS[r.kat].name)}">${r.kat}</span></td><td data-l="Proyek" class="pj">${esc(r.proyek)}</td><td data-l="Customer">${esc(r.customer)}</td><td data-l="No. Lambung"><b class="tmno">${esc(r.lambung)}</b></td><td data-l="No. Polisi">${esc(r.nopol)}</td><td data-l="Sopir">${esc(r.sopir)}</td><td data-l="Spesifikasi"><span class="mt">${esc(r.mutu)}</span></td><td data-l="Volume" class="r kb">${m3(r.kubik)} <small>${KATS[r.kat].sat}</small></td><td data-l="Dicatat" class="ow">@${esc(r.owner)}${r.edited_by ? `<small title="Diedit ${esc(r.edited_by)} ${r.edited_at ? dtText(Date.parse(r.edited_at)) : ''}">✏️ diedit admin</small>` : ''}</td>${isAdmin() ? `<td class="acts"><button type="button" class="ib" data-a="edit" data-id="${r.id}" title="Edit">✏️</button><button type="button" class="ib del" data-a="del" data-id="${r.id}" title="Hapus">🗑</button></td>` : ''}</tr>`).join('')}
+  setHTML($('#h-list'), [...groups].map(([k, list]) => { const all = day(k), ed = list.some(canEdit); return `<section class="hday"><div class="hd"><b>${dLong(list[0].t)}</b><span>${all.length} rit · ${katTotals(all).map(([kk, , v]) => (katN > 1 ? kk + ' ' : '') + vol(v, kk)).join(' · ')}</span></div>
+    <div class="card tbl"><table><thead><tr><th>Jam</th><th>Kategori</th><th>Proyek</th><th>Customer</th><th>No. Lambung</th><th>No. Polisi</th><th>Sopir</th><th>Spesifikasi</th><th class="r">Volume</th><th>Dicatat</th>${ed ? '<th></th>' : ''}</tr></thead><tbody>
+    ${list.map(r => `<tr class="${C.last === r.id ? 'new' : ''}"><td data-l="Jam" class="tm">${hm(r.t)}</td><td data-l="Kategori"><span class="kb-${r.kat} kbadge" title="${esc(KATS[r.kat].name)}">${r.kat}</span></td><td data-l="Proyek" class="pj">${esc(r.proyek)}</td><td data-l="Customer">${esc(r.customer)}</td><td data-l="No. Lambung"><b class="tmno">${esc(r.lambung)}</b></td><td data-l="No. Polisi">${esc(r.nopol)}</td><td data-l="Sopir">${esc(r.sopir)}</td><td data-l="Spesifikasi"><span class="mt">${esc(r.mutu)}</span></td><td data-l="Volume" class="r kb">${m3(r.kubik)} <small>${KATS[r.kat].sat}</small></td><td data-l="Dicatat" class="ow">@${esc(r.owner)}${r.edited_by ? `<small title="Diedit @${esc(r.edited_by)} ${r.edited_at ? dtText(Date.parse(r.edited_at)) : ''}">✏️ diedit${r.edited_by === r.owner ? '' : ' @' + esc(r.edited_by)}</small>` : ''}</td>${ed ? `<td class="acts">${canEdit(r) ? editBtn(r) : ''}${isAdmin() ? `<button type="button" class="ib del" data-a="del" data-id="${r.id}" title="Hapus">🗑</button>` : ''}</td>` : ''}</tr>`).join('')}
     </tbody></table></div></section>`; }).join('') + (rows.length > shown.length ? `<div class="more"><button type="button" class="btn" data-a="more">Tampilkan lebih banyak (${rows.length - shown.length} lagi)</button></div>` : ''));
 }
+// ✏️ — pemilik: tooltip batas waktu edit
+const editBtn = r => `<button type="button" class="ib" data-a="edit" data-id="${r.id}" title="${isAdmin() ? 'Edit' : 'Edit (bisa sampai ' + esc(dtText(editUntil(r))) + ')'}">✏️</button>`;
 // [kategori, ritase, volume] per kategori yang ada, urut CMP AMP SCP PCP
 function katTotals(rows) { const m = new Map(); for (const r of rows) { const a = m.get(r.kat) || [r.kat, 0, 0]; a[1]++; a[2] += r.kubik; m.set(r.kat, a); } return KAT_KEYS.filter(k => m.has(k)).map(k => m.get(k)); }
 function setPeriod(p) { C.h.p = p; LS.set('cmp.hp', p); const r = $('#h-range'); if (r) r.hidden = p !== 'custom'; C.h.limit = 200; }
@@ -651,7 +658,7 @@ async function saveTrip() {
   const d = Object.fromEntries(FIELDS.map(([k]) => [k, k === 'kubik' ? parseKubik(C.draft.kubik) : clean(C.draft[k])])); d.nopol = d.nopol.toUpperCase(); d.kat = katOf(C.draft.kat);
   const ok = await confirmDlg(`<h2>🚚 Simpan & berangkat?</h2>
     <dl class="sumdl"><dt>Kategori</dt><dd><b>${esc(katLabel(d.kat))}</b></dd>${FIELDS.map(([k]) => `<dt>${fieldText(k, d.kat)[0]}</dt><dd>${esc(k === 'kubik' ? vol(d.kubik, d.kat) : d[k])}</dd>`).join('')}<dt>Tanggal & jam</dt><dd><b>otomatis saat ini</b> (${esc(clockText())})</dd></dl>
-    <p class="muted small">Setelah disimpan, data tidak bisa diubah (hanya admin).</p>`, 'SAVE / BERANGKAT');
+    <p class="muted small">Setelah disimpan, kamu masih bisa mengedit kiriman ini selama 24 jam (tanggal & jam tidak bisa diubah).</p>`, 'SAVE / BERANGKAT');
   if (!ok) return;
   if (!C.cid) { C.cid = uid(); LS.set('cmp.cid', C.cid); } // id per draf: tekan ulang setelah gagal sinyal tidak membuat data ganda
   const b = $('#f-save'); b.disabled = true; b.textContent = 'Menyimpan…'; C.saving = true;
@@ -669,19 +676,21 @@ async function saveTrip() {
   } finally { C.saving = false; const b2 = $('#f-save'); if (b2) { b2.disabled = false; b2.textContent = '🚚 SAVE / BERANGKAT'; } }
 }
 
-// ---------- admin: edit / hapus ----------
+// ---------- edit (admin: semua · pemilik: ≤ 24 jam sejak disimpan) / hapus (admin) ----------
 const dlg = () => $('#dlg');
 function toLocalInput(t) { const d = new Date(t); return `${ymd(d)}T${hm(t)}`; }
 function editDialog(id) {
-  const r = C.rows.get(Number(id)); if (!r || !isAdmin()) return;
+  const r = C.rows.get(Number(id)); if (!r) return;
+  if (!canEdit(r)) { toast(r.owner === C.me?.name ? 'Batas edit 24 jam untuk kiriman ini sudah lewat.' : 'Hanya yang menginput / admin yang bisa mengedit.', 'warn'); vHist(); return; }
+  const adm = isAdmin();
   dlg().innerHTML = `<form class="dlgf" id="e-form" data-id="${r.id}" autocomplete="off">
     <div class="dh"><b>✏️ Edit kiriman #${r.id}</b><span class="sp"></span><button type="button" class="ib" data-a="close">✕</button></div>
-    <p class="muted small">Dicatat oleh @${esc(r.owner)} · ${dtText(r.t)}</p>
-    <div class="fgrid"><label class="fld"><span>🕒 Tanggal & jam berangkat</span><input type="datetime-local" id="e-at" value="${toLocalInput(r.t)}" required></label>
+    <p class="muted small">Dicatat oleh @${esc(r.owner)} · ${dtText(r.t)}${adm ? '' : ` · <b>bisa diedit sampai ${esc(dtText(editUntil(r)))}</b>`}</p>
+    <div class="fgrid">${adm ? `<label class="fld"><span>🕒 Tanggal & jam berangkat</span><input type="datetime-local" id="e-at" value="${toLocalInput(r.t)}" required></label>` : `<div class="fld"><span>🕒 Tanggal & jam berangkat</span><div class="ro">${esc(dtText(r.t))} <small class="muted">(tetap)</small></div></div>`}
     <label class="fld"><span>🏭 Kategori Produksi</span>${katSelect('e-kat', r.kat)}</label></div>
     <div class="fgrid">${FIELDS.map(([k, , , ic]) => { const [l, ph] = fieldText(k, r.kat); return `<label class="fld" data-ef="${k}"><span>${ic} ${l}</span>${cbHTML('e-' + k, k, k === 'kubik' ? m3(r.kubik) : r[k], ph, 'input')}</label>`; }).join('')}</div>
     <p class="err" id="e-err"></p>
-    <div class="dact"><button type="button" class="btn danger" data-a="del" data-id="${r.id}">🗑 Hapus</button><span class="sp"></span><button type="button" class="btn" data-a="close">Batal</button><button type="submit" class="btn primary">Simpan perubahan</button></div>
+    <div class="dact">${adm ? `<button type="button" class="btn danger" data-a="del" data-id="${r.id}">🗑 Hapus</button>` : ''}<span class="sp"></span><button type="button" class="btn" data-a="close">Batal</button><button type="submit" class="btn primary">Simpan perubahan</button></div>
   </form>`;
   dlg().className = 'wide'; dlg().showModal();
 }
@@ -692,10 +701,10 @@ async function saveEdit(f) {
   const bad = volBad(d.kubik, d.kat); if (bad) { err.textContent = bad; return; }
   if (!C.katOk && d.kat !== 'CMP') { err.textContent = 'Server belum diperbarui untuk kategori ' + d.kat + '.'; return; }
   d.kubik = parseKubik(d.kubik);
-  const at = $('#e-at').value; if (at) d.at = new Date(at).toISOString();
+  const at = $('#e-at')?.value; if (at) d.at = new Date(at).toISOString(); // hanya admin
   try {
     const r = await rpc('cmp_edit', { p_token: C.token, p_id: id, p_data: d });
-    if (!r?.ok) throw new Error({ forbidden: 'hanya admin', missing: 'data sudah dihapus', kubik: r.max ? `volume melebihi batas ${m3(r.max)} ${KATS[d.kat].sat}` : 'volume tidak valid', at: 'tanggal tidak valid', kat: 'kategori tidak valid' }[r?.err] || r?.err || 'ditolak');
+    if (!r?.ok) throw new Error({ forbidden: 'hanya yang menginput / admin', expired: 'batas edit 24 jam sudah lewat', missing: 'data sudah dihapus', kubik: r.max ? `volume melebihi batas ${m3(r.max)} ${KATS[d.kat].sat}` : 'volume tidak valid', at: 'tanggal tidak valid', kat: 'kategori tidak valid' }[r?.err] || r?.err || 'ditolak');
     takeRow(r.row); saveCache(); dlg().close(); render(); toast('Perubahan disimpan.', 'ok', null, 2500);
   } catch (e) { err.textContent = 'Gagal: ' + e.message; }
 }
