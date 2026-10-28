@@ -2628,11 +2628,11 @@ const LCH = {
   lpRef: el => { const v = el.value; if (!v) return; LP.ref = LP.kind === 'month' ? v + '-01' : LP.kind === 'year' ? v + '-01-01' : v; $('#lp-sum').innerHTML = lpSumHtml(); },
 };
 
-// Virtual Work AHG — reminder, global chat (+ whisper), task (+ rutin mingguan) dan kasbon tim. Data di Supabase (proyek saku-yuk), sinkron real time.
-const BUILD = '20261027-230253';
+// Virtual Work AHG — reminder, global chat (+ whisper), task (+ rutin mingguan) dan kasbon tim. Data di Supabase (proyek ahg-produksi), sinkron real time.
+const BUILD = '20261028-074755';
 const SB_URL = 'https://herltzublcqpbgyxbbyp.supabase.co', SB_KEY = 'sb_publishable_FMSC0iqDRLsRXtvTtZX0Ow_piPi5bli'; // public key; tables closed, only ahg_* functions
-// File baru → Backblaze B2 (penyimpanan bersama pantau/klip-worker, situs 'ahg' = 60 % dari 9 GiB) lewat Supabase Edge Function simpan.
-const B2_URL = 'https://bbptcxpzzvgpxqylkrmw.supabase.co/functions/v1/simpan', B2_QUOTA = 5798205849;
+// File → Supabase Storage (bucket privat ahg-files, proyek ini) lewat Edge Function ahg-file: cek login, beri tautan unggah/unduh bertanda tangan.
+const ST_URL = SB_URL + '/functions/v1/ahg-file', ST_QUOTA = 943718400; // 900 MiB dari 1 GB gratis (sama dengan ahg_file_quota() di server)
 
 // ---------- helpers ----------
 const $ = (s, r = document) => r.querySelector(s);
@@ -2871,31 +2871,29 @@ async function prepFile(file) { // → {fid, name, mime, size, data(base64), thu
   if (!data) { if (file.size > 8e6) throw new Error(`"${name}" terlalu besar (maks 8 MB).`); data = await readB64(file); }
   return { fid: uid() + uid().slice(0, 6), name, mime, size: Math.round(data.length * 3 / 4), data, thumb };
 }
-async function b2(path, init = {}) {
-  const r = await fetch(B2_URL + path, { ...init, cache: 'no-store', headers: { 'x-site': 'ahg', 'x-token': S.token, ...(init.headers || {}) } });
+async function st(path, body) {
+  const r = await fetch(ST_URL + path, { method: 'POST', cache: 'no-store', headers: { 'x-token': S.token, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const j = await r.json().catch(() => null);
-  if (!r.ok) { const e = new Error(r.status === 413 && j?.error === 'kuota penuh' ? `Penyimpanan penuh (${fsize(B2_QUOTA)}). Hapus file lama dulu.` : 'B2: ' + (j?.error || r.status)); e.status = r.status; throw e; }
+  if (!r.ok) { const e = new Error(r.status === 413 ? `Penyimpanan penuh (${fsize(ST_QUOTA)}). Hapus file lama dulu.` : r.status === 401 ? 'Sesi habis, login ulang.' : 'Storage: ' + (j?.error || r.status)); e.status = r.status; throw e; }
   return j;
 }
-const b2Path = id => 's/ahg/' + id, b2Json = body => ({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-async function b2Upload(id, blob, name, mime, onProg) { // ke B2 (≤ 8 MiB sekali kirim, lebih besar per bagian) lalu daftarkan di ahg_files
-  const p = b2Path(id), retry = async fn => { for (let t = 0; ; t++) { try { return await fn(); } catch (e) { if (t >= 2 || e.status && e.status < 500) throw e; await new Promise(r => setTimeout(r, 800 * (t + 1))); } } };
-  if (blob.size <= 8388608) await retry(() => b2('/o/' + p, { method: 'PUT', body: blob, headers: { 'Content-Type': mime || 'application/octet-stream' } }));
-  else {
-    const m = await b2('/mp/start', b2Json({ path: p, size: blob.size, mime }));
-    const n = Math.ceil(blob.size / m.part);
-    for (let i = 0; i < n; i++) { onProg?.(i, n); await retry(() => b2(`/mp/part?id=${encodeURIComponent(m.id)}&n=${i + 1}`, { method: 'PUT', body: blob.slice(i * m.part, (i + 1) * m.part) })); }
-    await retry(() => b2('/mp/done', b2Json({ id: m.id })));
+async function stUpload(id, blob, name, mime, onProg) { // ke Supabase Storage per bagian 8 MiB (langsung dari browser) lalu daftarkan di ahg_files
+  const retry = async fn => { for (let t = 0; ; t++) { try { return await fn(); } catch (e) { if (t >= 2 || e.status && e.status < 500) throw e; await new Promise(r => setTimeout(r, 800 * (t + 1))); } } };
+  const u = await st('/up', { id, size: blob.size }), n = u.urls.length;
+  for (let i = 0; i < n; i++) {
+    if (n > 1) onProg?.(i, n);
+    await retry(async () => { const r = await fetch(u.urls[i], { method: 'PUT', body: blob.slice(i * u.part, (i + 1) * u.part), headers: { 'Content-Type': 'application/octet-stream' } });
+      if (!r.ok) { const e = new Error('Upload gagal di bagian ' + (i + 1) + '/' + n + '.'); e.status = r.status; throw e; } });
   }
-  const r = await rpc('ahg_file_b2', { p_token: S.token, p_id: id, p_name: name, p_mime: mime, p_size: blob.size });
-  if (!r?.ok) { b2('/del', b2Json({ paths: [p] })).catch(() => {}); throw new Error('Upload gagal (' + (r?.err || 'server') + ').'); }
+  const r = await rpc('ahg_file_st', { p_token: S.token, p_id: id, p_name: name, p_mime: mime, p_size: blob.size });
+  if (!r?.ok) { const e = new Error(r?.err === 'quota' ? `Penyimpanan penuh (${fsize(ST_QUOTA)}). Hapus file lama dulu.` : 'Upload gagal (' + (r?.err || 'server') + ').'); if (r?.err === 'quota') e.status = 413; throw e; }
 }
 async function uploadFile(f) {
   try {
     const bin = atob(f.data), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
-    await b2Upload(f.fid, new Blob([u8], { type: f.mime }), f.name, f.mime);
+    await stUpload(f.fid, new Blob([u8], { type: f.mime }), f.name, f.mime);
     return { id: f.fid, name: f.name, mime: f.mime, size: f.size, thumb: f.thumb || '' };
-  } catch (e) { if (e.status === 413) throw e; console.warn('B2 gagal, simpan ke database:', e); } // cadangan: database lama (maks 100 MB total)
+  } catch (e) { if (e.status === 413 || e.status === 401) throw e; console.warn('Storage gagal, simpan ke database:', e); } // cadangan: tabel ahg_files
   const r = await rpc('ahg_file_put', { p_token: S.token, p_id: f.fid, p_name: f.name, p_mime: f.mime, p_data: f.data });
   if (!r?.ok) throw new Error(r?.err === 'quota' ? 'Penyimpanan penuh (maks 100 MB total). Hapus file lama dulu.' : r?.err === 'size' ? 'File terlalu besar.' : 'Upload gagal.');
   return { id: f.fid, name: f.name, mime: f.mime, size: f.size, thumb: f.thumb || '' };
@@ -2903,10 +2901,10 @@ async function uploadFile(f) {
 async function fileUrl(id) {
   if (fileUrls.has(id)) return fileUrls.get(id);
   const w = await rpc('ahg_file_where', { p_token: S.token, p_id: id }).catch(() => null);
-  if (w?.ok && w.b2) {
-    const link = (await b2('/sign', b2Json({ paths: [w.b2] })))[w.b2], res = link && await fetch(link);
-    if (!res?.ok) throw new Error('File tidak ditemukan.');
-    const url = URL.createObjectURL(new Blob([await res.arrayBuffer()], { type: w.mime || res.headers.get('content-type') || '' })); fileUrls.set(id, url); return url;
+  if (w?.ok && w.st) {
+    const g = await st('/get', { id }), parts = [];
+    for (const link of g.urls) { const res = await fetch(link); if (!res.ok) throw new Error('File tidak ditemukan.'); parts.push(await res.arrayBuffer()); }
+    const url = URL.createObjectURL(new Blob(parts, { type: w.mime || '' })); fileUrls.set(id, url); return url;
   }
   const r = await rpc('ahg_file_get', { p_token: S.token, p_id: id });
   if (!r?.ok) throw new Error('File tidak ditemukan.');
@@ -3464,14 +3462,14 @@ function fileIcon2(f) {
   const x = fileExt(f.name).toLowerCase();
   return /^image\//.test(f.mime) ? '🖼' : /pdf/.test(f.mime) || x === 'pdf' ? '📕' : /sheet|excel|csv/.test(f.mime) || /^(xlsx?|csv)$/.test(x) ? '📗' : /word|document/.test(f.mime) || /^docx?$/.test(x) ? '📘' : /presentation|powerpoint/.test(f.mime) || /^pptx?$/.test(x) ? '📙' : fileIcon(f.mime);
 }
-const FILE_MAX = 100 * 1048576, FILE_QUOTA = B2_QUOTA, CHUNK = 3145728; // Files tab: per file sampai 100 MB; total = kuota B2 (file lama di database ikut dihitung)
+const FILE_MAX = 100 * 1048576, FILE_QUOTA = ST_QUOTA, CHUNK = 3145728; // Files tab: per file sampai 100 MB; total = kuota Storage (file lama di database ikut dihitung)
 async function uploadBig(file, onProg) {
   if (file.size > FILE_MAX) throw new Error(`"${file.name}" terlalu besar (maks 100 MB).`);
   if (!file.size) throw new Error(`"${file.name}" kosong.`);
   if ((S.task.used || 0) + file.size > FILE_QUOTA) throw new Error(`Penyimpanan penuh: ${fsize(S.task.used || 0)} / ${fsize(FILE_QUOTA)} terpakai, "${file.name}" (${fsize(file.size)}) tidak muat.`);
   const id = uid() + uid().slice(0, 6), n = Math.ceil(file.size / CHUNK);
-  try { return await b2Upload(id, file, file.name || 'file', file.type || 'application/octet-stream', onProg); }
-  catch (e) { if (e.status === 413 || file.size > 8e6) throw e; console.warn('B2 gagal, simpan ke database:', e); }
+  try { return await stUpload(id, file, file.name || 'file', file.type || 'application/octet-stream', onProg); }
+  catch (e) { if (e.status === 413 || e.status === 401 || file.size > 8e6) throw e; console.warn('Storage gagal, simpan ke database:', e); }
   const b = await rpc('ahg_file_begin', { p_token: S.token, p_id: id, p_name: file.name || 'file', p_mime: file.type || 'application/octet-stream', p_size: file.size, p_chunks: n });
   if (!b?.ok) throw new Error(b?.err === 'quota' ? 'Penyimpanan penuh (maks 100 MB total). Hapus file lama dulu.' : 'Upload gagal (' + (b?.err || 'server') + ').');
   for (let i = 0; i < n; i++) {
@@ -3487,8 +3485,8 @@ async function loadFiles() {
     const r = await rpc('ahg_file_list', { p_token: S.token });
     if (!r?.ok) throw new Error(r?.err === 'auth' ? 'sesi habis' : r?.err === undefined ? 'RPC ahg_file_list belum dipasang di Supabase' : r.err);
     S.task.files = r.files || []; S.task.filesErr = ''; S.task.used = r.used ?? S.task.files.reduce((a, f) => a + (f.size || 0), 0);
-    const [pool, use] = await Promise.all([rpc('ahg_file_pool', { p_token: S.token }).catch(() => null), b2('/usage').catch(() => null)]);
-    if (pool?.ok && use) S.task.used = pool.db + use.used; // B2 + file lama di database
+    const pool = await rpc('ahg_file_pool', { p_token: S.token }).catch(() => null);
+    if (pool?.ok) S.task.used = pool.db + pool.st + pool.b2; // Storage + file di database
   } catch (e) { S.task.files = S.task.files || []; S.task.filesErr = /404/.test(e.message) ? 'fungsi Files belum ada di server (404) — jalankan SQL "Files library" di Supabase SQL editor' : e.message; }
   if (S.view === 'task' && S.task.tab === 'files') renderMain();
 }
@@ -3496,7 +3494,7 @@ function vFiles() {
   const T = S.task, q = (T.fq || '').trim().toLowerCase();
   const l = (T.files || []).filter(f => !q || (f.name + ' ' + uname(f.owner)).toLowerCase().includes(q));
   return `<section class="card files">
-    ${(() => { const u = T.used || 0, p = Math.min(100, u / FILE_QUOTA * 100); return `<div class="fl-use" title="Total penyimpanan semua file (Backblaze B2 + file lama)"><b>${fsize(u)} / ${fsize(FILE_QUOTA)}</b><div class="prog"><i style="width:${p}%;${p >= 90 ? 'background:#e5484d' : ''}"></i></div></div>`; })()}
+    ${(() => { const u = T.used || 0, p = Math.min(100, u / FILE_QUOTA * 100); return `<div class="fl-use" title="Total penyimpanan semua file (Supabase Storage + database)"><b>${fsize(u)} / ${fsize(FILE_QUOTA)}</b><div class="prog"><i style="width:${p}%;${p >= 90 ? 'background:#e5484d' : ''}"></i></div></div>`; })()}
     <div class="fl-h"><label class="btn primary attach">⬆ Upload<input type="file" multiple hidden data-ch="flUpload"></label>
       <input id="fl-q" class="t-q" placeholder="🔍 Cari file / pemilik…" data-ch="flQ" value="${esc(T.fq || '')}">
       <button type="button" class="ib" data-a="flReload" title="Muat ulang">⟳</button></div>
@@ -4259,7 +4257,7 @@ const A = {
   flDel: async el => {
     const f = S.task.files?.find(x => x.id === el.dataset.id); if (!f || !canFile(f)) return;
     if (!await confirmDlg(`Hapus file <b>${esc(f.name)}</b>? Lampiran di task / chat yang memakai file ini tidak bisa dibuka lagi.`, 'Hapus')) return;
-    try { const x = await rpc('ahg_file_delete', { p_token: S.token, p_id: f.id }); if (!x?.ok) throw new Error({ forbidden: 'hanya pemilik / admin', missing: 'file tidak ada' }[x?.err] || x?.err || 'gagal'); b2('/del', b2Json({ paths: [b2Path(f.id)] })).catch(() => {}); fileUrls.delete(f.id); S.task.files = S.task.files.filter(y => y.id !== f.id); renderMain(); toast('File dihapus.', 'info', null, 2500); }
+    try { const x = await rpc('ahg_file_delete', { p_token: S.token, p_id: f.id }); if (!x?.ok) throw new Error({ forbidden: 'hanya pemilik / admin', missing: 'file tidak ada' }[x?.err] || x?.err || 'gagal'); fileUrls.delete(f.id); S.task.files = S.task.files.filter(y => y.id !== f.id); renderMain(); toast('File dihapus.', 'info', null, 2500); }
     catch (e) { toast('Gagal menghapus: ' + esc(e.message), 'warn'); loadFiles(); }
   },
   openFile: el => viewFile(el.dataset.id, el.dataset.name, el.dataset.mime),
