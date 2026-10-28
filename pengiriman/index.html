@@ -284,7 +284,7 @@ const PDF = {
 // Pengiriman AHG (ahgproduksi.github.io/pengiriman, dulu /cmp) — pencatatan keberangkatan pengiriman produksi per kategori CMP/AMP/SCP/PCP
 // (referral CMPAHG). Data di Supabase ahg-produksi (tabel ahg_cmp lewat fungsi cmp_*; kolom mutu = spesifikasi, kubik = volume), sinkron tiap 4 dtk.
 // Tanggal & jam = waktu server saat SAVE/BERANGKAT. Hanya admin yang bisa mengedit / menghapus.
-const BUILD = '20261027-225554';
+const BUILD = '20261028-095858';
 const SB_URL = 'https://herltzublcqpbgyxbbyp.supabase.co', SB_KEY = 'sb_publishable_FMSC0iqDRLsRXtvTtZX0Ow_piPi5bli'; // public key; tables closed, only rpc
 
 // ---------- helpers ----------
@@ -346,7 +346,7 @@ const DEFAULTS = { lambung: ['TM 46', 'TM 47', 'TM 48', 'TM 49', 'TM 50', 'TM 51
 const baseList = (k, kat) => k === 'mutu' ? KATS[katOf(kat)].specs : k === 'lambung' && katOf(kat) === 'CMP' ? DEFAULTS.lambung : [];
 const vol = (n, kat) => `${m3(n)} ${KATS[katOf(kat)].sat}`;
 const FILTERS = ['proyek', 'customer', 'lambung', 'nopol', 'sopir', 'mutu', 'owner'];
-const PERIODS = { today: 'Hari ini', yday: 'Kemarin', d7: '7 hari terakhir', month: 'Bulan ini', pmonth: 'Bulan lalu', all: 'Semua', custom: 'Rentang tanggal…' };
+const PERIODS = { last: 'Hari input terakhir', today: 'Hari ini', yday: 'Kemarin', d7: '7 hari terakhir', month: 'Bulan ini', pmonth: 'Bulan lalu', all: 'Semua', custom: 'Rentang tanggal…' };
 
 // ---------- state ----------
 const C = {
@@ -354,7 +354,7 @@ const C = {
   tab: SS.get('cmp.tab') === 'hist' ? 'hist' : 'input',
   draft: { kat: 'CMP', proyek: '', customer: '', lambung: '', nopol: '', sopir: '', mutu: '', kubik: '', ...jget('cmp.draft', {}) },
   cid: LS.get('cmp.cid') || '', saving: false, last: null, katOk: false, // katOk: server sudah punya kolom kategori (pengiriman-kategori.sql)
-  h: { p: 'today', from: '', to: '', q: '', kat: SS.get('cmp.hkat') || '', f: {}, open: innerWidth > 760, limit: 200 },
+  h: { p: PERIODS[LS.get('cmp.hp')] ? LS.get('cmp.hp') : 'last', from: '', to: '', q: '', kat: SS.get('cmp.hkat') || '', f: {}, open: innerWidth > 760, limit: 200 },
   sync: { busy: false, at: 0, err: '' },
 };
 const isAdmin = () => C.me?.role === 'admin';
@@ -551,6 +551,7 @@ const dShort = t => { const d = new Date(t); return `${d.getDate()} ${MSH[d.getM
 function periodRange() {
   const h = C.h, n = new Date(srvNow()), t0 = new Date(n.getFullYear(), n.getMonth(), n.getDate());
   switch (h.p) {
+    case 'last': { const t = lastT(), d = t ? new Date(t) : t0, d0 = new Date(d.getFullYear(), d.getMonth(), d.getDate()); return [d0, addDays(d0, 1)]; }
     case 'today': return [t0, addDays(t0, 1)];
     case 'yday': return [addDays(t0, -1), t0];
     case 'd7': return [addDays(t0, -6), addDays(t0, 1)];
@@ -560,6 +561,8 @@ function periodRange() {
     default: return [new Date(0), new Date(8.64e15)];
   }
 }
+// waktu kiriman terbaru (ikut filter kategori) — periode 'Hari input terakhir' = tanggal kiriman itu
+const lastT = () => live().reduce((m, r) => (!C.h.kat || r.kat === C.h.kat) && r.t > m ? r.t : m, 0);
 const fval = (r, k) => k === 'kubik' ? m3(r.kubik) : String(r[k] ?? '');
 // filter: nilai persis dari daftar = cocok persis; ketikan bebas = mengandung
 function filtered(skip) {
@@ -611,7 +614,7 @@ function vHist() {
   setHTML($('#h-sum'), `<div class="sum"><div class="card kpi"><span>Ritase</span><b>${rows.length.toLocaleString('id-ID')}</b></div>
     <div class="card kpi"><span>Total volume${one ? ' · ' + one[0] : ''}</span>${one ? `<b>${m3(one[2])} <small>${KATS[one[0]].sat}</small></b>` : katN ? `<div class="kvols">${byKat.map(([k, n, v]) => `<button type="button" class="kvol" data-a="katSet" data-k="${k}"><span class="kb-${k} kbadge">${k}</span> <b>${m3(v)}</b> ${KATS[k].sat} <small>${n} rit</small></button>`).join('')}</div>` : '<b>0</b>'}</div>
     <div class="card kpi wide"><span>Per spesifikasi</span><div class="chips">${[...byMutu.values()].sort((a, b) => KAT_KEYS.indexOf(a[0]) - KAT_KEYS.indexOf(b[0]) || b[3] - a[3]).map(([k, m, n, v]) => `<button type="button" class="chip" data-a="fSet" data-k="mutu" data-v="${esc(m)}">${katN > 1 ? `<span class="kb-${k} kbadge">${k}</span> ` : ''}${esc(m)} <b>${n}</b> rit · ${vol(v, k)}</button>`).join('') || '<span class="muted small">—</span>'}</div></div></div>`);
-  if (!rows.length) { setHTML($('#h-list'), `<div class="card empty">${C.loaded ? 'Tidak ada kiriman untuk periode / filter ini.' : 'Memuat data…'}</div>`); return; }
+  if (!rows.length) { const lt = lastT(); setHTML($('#h-list'), `<div class="card empty">${!C.loaded ? 'Memuat data…' : `Tidak ada kiriman untuk periode / filter ini.${lt ? `<br><span class="muted small">Input terakhir: ${esc(dtText(lt))}</span><br><button type="button" class="btn sm" data-a="pSet" data-p="last">📅 Tampilkan hari input terakhir</button> <button type="button" class="btn sm" data-a="pSet" data-p="all">Semua</button>` : ''}`}</div>`); return; }
   const shown = rows.slice(0, h.limit), groups = new Map();
   for (const r of shown) { const k = ymd(new Date(r.t)); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); }
   const day = k => rows.filter(r => ymd(new Date(r.t)) === k);
@@ -622,6 +625,7 @@ function vHist() {
 }
 // [kategori, ritase, volume] per kategori yang ada, urut CMP AMP SCP PCP
 function katTotals(rows) { const m = new Map(); for (const r of rows) { const a = m.get(r.kat) || [r.kat, 0, 0]; a[1]++; a[2] += r.kubik; m.set(r.kat, a); } return KAT_KEYS.filter(k => m.has(k)).map(k => m.get(k)); }
+function setPeriod(p) { C.h.p = p; LS.set('cmp.hp', p); const r = $('#h-range'); if (r) r.hidden = p !== 'custom'; C.h.limit = 200; }
 function applyFilters() { for (const k of FILTERS) { const el = $('#hf-' + k); if (el) C.h.f[k] = el.value; } C.h.limit = 200; vHist(); }
 
 // ---------- save ----------
@@ -751,6 +755,7 @@ const A = {
   katSet(el) { C.h.kat = el.dataset.k; SS.set('cmp.hkat', C.h.kat); $('#h-kat').value = C.h.kat; C.h.limit = 200; vHist(); },
   fSet(el) { C.h.f[el.dataset.k] = el.dataset.v; const i = $('#hf-' + el.dataset.k); if (i) i.value = el.dataset.v; C.h.open = true; $('#h-f').hidden = false; vHist(); },
   more() { C.h.limit += 300; vHist(); },
+  pSet(el) { setPeriod(el.dataset.p); const s = $('#h-p'); if (s) s.value = C.h.p; vHist(); },
   xlsx() { exportXlsx(); },
   waDlg() { waDialog(); },
   waCopy() { waCopy(); },
@@ -783,7 +788,7 @@ document.addEventListener('change', ev => {
   if (t.id === 'f-kat') setKat(t.value);
   if (t.id === 'e-kat') editKat(t.value);
   if (t.id === 'h-kat') { C.h.kat = t.value; SS.set('cmp.hkat', t.value); C.h.limit = 200; vHist(); }
-  if (t.id === 'h-p') { C.h.p = t.value; $('#h-range').hidden = t.value !== 'custom'; C.h.limit = 200; vHist(); }
+  if (t.id === 'h-p') { setPeriod(t.value); vHist(); }
   if (t.id === 'h-from' || t.id === 'h-to') { C.h[t.id === 'h-from' ? 'from' : 'to'] = t.value; vHist(); }
 });
 document.addEventListener('keydown', ev => {
