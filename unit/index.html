@@ -2629,10 +2629,11 @@ const LCH = {
 };
 
 // Virtual Work AHG — reminder, global chat (+ whisper), task (+ rutin mingguan) dan kasbon tim. Data di Supabase (proyek ahg-produksi), sinkron real time.
-const BUILD = '20261028-092941';
+const BUILD = '20261102-142712';
 const SB_URL = 'https://herltzublcqpbgyxbbyp.supabase.co', SB_KEY = 'sb_publishable_FMSC0iqDRLsRXtvTtZX0Ow_piPi5bli'; // public key; tables closed, only ahg_* functions
-// File → Supabase Storage (bucket privat ahg-files, proyek ini) lewat Edge Function ahg-file: cek login, beri tautan unggah/unduh bertanda tangan.
-const ST_URL = SB_URL + '/functions/v1/ahg-file', ST_QUOTA = 644245094; // 60% dari 1 GB gratis, 40% sisanya untuk saku-yuk (sama dengan ahg_file_quota() di server)
+// File → Google Drive yulius.krisnawan (folder "AHG Produksi", 5 GiB) lewat Edge Function ahg-file: cek login, buka sesi upload Drive
+// (browser kirim byte langsung ke Google), unduh diproksikan per 8 MiB. Cadangan saat Drive terputus: Supabase Storage (bucket ahg-files).
+const ST_URL = SB_URL + '/functions/v1/ahg-file', ST_QUOTA = 644245094, GD_QUOTA = 5368709120; // Storage 60% dari 1 GB gratis (ahg_file_quota) · Drive 5 GiB (ahg_file_gd_quota)
 
 // ---------- helpers ----------
 const $ = (s, r = document) => r.querySelector(s);
@@ -2874,19 +2875,31 @@ async function prepFile(file) { // → {fid, name, mime, size, data(base64), thu
 async function st(path, body) {
   const r = await fetch(ST_URL + path, { method: 'POST', cache: 'no-store', headers: { 'x-token': S.token, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const j = await r.json().catch(() => null);
-  if (!r.ok) { const e = new Error(r.status === 413 ? `Penyimpanan penuh (${fsize(ST_QUOTA)}). Hapus file lama dulu.` : r.status === 401 ? 'Sesi habis, login ulang.' : 'Storage: ' + (j?.error || r.status)); e.status = r.status; throw e; }
+  if (!r.ok) { const e = new Error(r.status === 413 ? `Penyimpanan penuh (${fsize(FILE_QUOTA)}). Hapus file lama dulu.` : r.status === 401 ? 'Sesi habis, login ulang.' : 'Storage: ' + (j?.error || r.status)); e.status = r.status; throw e; }
   return j;
 }
-async function stUpload(id, blob, name, mime, onProg) { // ke Supabase Storage per bagian 8 MiB (langsung dari browser) lalu daftarkan di ahg_files
+async function stUpload(id, blob, name, mime, onProg) { // ke Google Drive (atau Supabase Storage) per bagian 8 MiB langsung dari browser, lalu daftarkan di ahg_files
   const retry = async fn => { for (let t = 0; ; t++) { try { return await fn(); } catch (e) { if (t >= 2 || e.status && e.status < 500) throw e; await new Promise(r => setTimeout(r, 800 * (t + 1))); } } };
-  const u = await st('/up', { id, size: blob.size }), n = u.urls.length;
+  const u = await st('/up', { id, size: blob.size, name, mime });
+  if (u.drive) { // sesi resumable Drive: tiap bagian PUT dengan Content-Range, 308 = lanjut, 200/201 = selesai
+    const n = Math.ceil(blob.size / u.part);
+    for (let i = 0; i < n; i++) {
+      if (n > 1) onProg?.(i, n);
+      const from = i * u.part, to = Math.min(blob.size, from + u.part) - 1;
+      await retry(async () => { const r = await fetch(u.drive, { method: 'PUT', body: blob.slice(from, to + 1), headers: { 'Content-Range': `bytes ${from}-${to}/${blob.size}` } });
+        if (!(r.ok || r.status === 308)) { const e = new Error('Upload ke Google Drive gagal di bagian ' + (i + 1) + '/' + n + '.'); e.status = r.status === 404 || r.status === 410 ? 400 : r.status; throw e; } });
+    }
+    await retry(() => st('/done', { id }));
+    return;
+  }
+  const n = u.urls.length;
   for (let i = 0; i < n; i++) {
     if (n > 1) onProg?.(i, n);
     await retry(async () => { const r = await fetch(u.urls[i], { method: 'PUT', body: blob.slice(i * u.part, (i + 1) * u.part), headers: { 'Content-Type': 'application/octet-stream' } });
       if (!r.ok) { const e = new Error('Upload gagal di bagian ' + (i + 1) + '/' + n + '.'); e.status = r.status; throw e; } });
   }
   const r = await rpc('ahg_file_st', { p_token: S.token, p_id: id, p_name: name, p_mime: mime, p_size: blob.size });
-  if (!r?.ok) { const e = new Error(r?.err === 'quota' ? `Penyimpanan penuh (${fsize(ST_QUOTA)}). Hapus file lama dulu.` : 'Upload gagal (' + (r?.err || 'server') + ').'); if (r?.err === 'quota') e.status = 413; throw e; }
+  if (!r?.ok) { const e = new Error(r?.err === 'quota' ? `Penyimpanan penuh (${fsize(FILE_QUOTA)}). Hapus file lama dulu.` : 'Upload gagal (' + (r?.err || 'server') + ').'); if (r?.err === 'quota') e.status = 413; throw e; }
 }
 async function uploadFile(f) {
   try {
@@ -2901,6 +2914,15 @@ async function uploadFile(f) {
 async function fileUrl(id) {
   if (fileUrls.has(id)) return fileUrls.get(id);
   const w = await rpc('ahg_file_where', { p_token: S.token, p_id: id }).catch(() => null);
+  if (w?.ok && w.gd) { // Google Drive: byte lewat proksi ahg-file per 8 MiB
+    const parts = [], n = Math.max(1, Math.ceil(w.size / 8388608));
+    for (let i = 0; i < n; i++) {
+      const res = await fetch(ST_URL + '/dl', { method: 'POST', cache: 'no-store', headers: { 'x-token': S.token, 'Content-Type': 'application/json' }, body: JSON.stringify({ id, i }) });
+      if (!res.ok) throw new Error(res.status === 401 ? 'Sesi habis, login ulang.' : 'File tidak ditemukan di Google Drive.');
+      parts.push(await res.arrayBuffer());
+    }
+    const url = URL.createObjectURL(new Blob(parts, { type: w.mime || '' })); fileUrls.set(id, url); return url;
+  }
   if (w?.ok && w.st) {
     const g = await st('/get', { id }), parts = [];
     for (const link of g.urls) { const res = await fetch(link); if (!res.ok) throw new Error('File tidak ditemukan.'); parts.push(await res.arrayBuffer()); }
@@ -3462,7 +3484,8 @@ function fileIcon2(f) {
   const x = fileExt(f.name).toLowerCase();
   return /^image\//.test(f.mime) ? '🖼' : /pdf/.test(f.mime) || x === 'pdf' ? '📕' : /sheet|excel|csv/.test(f.mime) || /^(xlsx?|csv)$/.test(x) ? '📗' : /word|document/.test(f.mime) || /^docx?$/.test(x) ? '📘' : /presentation|powerpoint/.test(f.mime) || /^pptx?$/.test(x) ? '📙' : fileIcon(f.mime);
 }
-const FILE_MAX = 100 * 1048576, FILE_QUOTA = ST_QUOTA, CHUNK = 3145728; // Files tab: per file sampai 100 MB; total = kuota Storage (file lama di database ikut dihitung)
+const FILE_MAX = 100 * 1048576, CHUNK = 3145728; // Files tab: per file sampai 100 MB
+let FILE_QUOTA = GD_QUOTA, FILE_DRIVE = true; // dari ahg_file_pool: Drive tersambung → 5 GiB Drive, kalau tidak → kuota Storage
 async function uploadBig(file, onProg) {
   if (file.size > FILE_MAX) throw new Error(`"${file.name}" terlalu besar (maks 100 MB).`);
   if (!file.size) throw new Error(`"${file.name}" kosong.`);
@@ -3486,7 +3509,7 @@ async function loadFiles() {
     if (!r?.ok) throw new Error(r?.err === 'auth' ? 'sesi habis' : r?.err === undefined ? 'RPC ahg_file_list belum dipasang di Supabase' : r.err);
     S.task.files = r.files || []; S.task.filesErr = ''; S.task.used = r.used ?? S.task.files.reduce((a, f) => a + (f.size || 0), 0);
     const pool = await rpc('ahg_file_pool', { p_token: S.token }).catch(() => null);
-    if (pool?.ok) S.task.used = pool.db + pool.st + pool.b2; // Storage + file di database
+    if (pool?.ok) { FILE_DRIVE = !!pool.drive; FILE_QUOTA = FILE_DRIVE ? pool.gdq || GD_QUOTA : pool.quota || ST_QUOTA; S.task.used = FILE_DRIVE ? pool.gd : pool.db + pool.st + pool.b2; }
   } catch (e) { S.task.files = S.task.files || []; S.task.filesErr = /404/.test(e.message) ? 'fungsi Files belum ada di server (404) — jalankan SQL "Files library" di Supabase SQL editor' : e.message; }
   if (S.view === 'task' && S.task.tab === 'files') renderMain();
 }
@@ -3494,7 +3517,7 @@ function vFiles() {
   const T = S.task, q = (T.fq || '').trim().toLowerCase();
   const l = (T.files || []).filter(f => !q || (f.name + ' ' + uname(f.owner)).toLowerCase().includes(q));
   return `<section class="card files">
-    ${(() => { const u = T.used || 0, p = Math.min(100, u / FILE_QUOTA * 100); return `<div class="fl-use" title="Total penyimpanan semua file (Supabase Storage + database)"><b>${fsize(u)} / ${fsize(FILE_QUOTA)}</b><div class="prog"><i style="width:${p}%;${p >= 90 ? 'background:#e5484d' : ''}"></i></div></div>`; })()}
+    ${(() => { const u = T.used || 0, p = Math.min(100, u / FILE_QUOTA * 100); return `<div class="fl-use" title="${FILE_DRIVE ? 'Google Drive AHG (yulius.krisnawan@gmail.com)' : 'Supabase Storage + database (Google Drive belum tersambung)'}"><b>${FILE_DRIVE ? '☁ Google Drive · ' : ''}${fsize(u)} / ${fsize(FILE_QUOTA)}</b><div class="prog"><i style="width:${p}%;${p >= 90 ? 'background:#e5484d' : ''}"></i></div></div>`; })()}
     <div class="fl-h"><label class="btn primary attach">⬆ Upload<input type="file" multiple hidden data-ch="flUpload"></label>
       <input id="fl-q" class="t-q" placeholder="🔍 Cari file / pemilik…" data-ch="flQ" value="${esc(T.fq || '')}">
       <button type="button" class="ib" data-a="flReload" title="Muat ulang">⟳</button></div>
