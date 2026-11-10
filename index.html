@@ -366,7 +366,7 @@ main[data-view=chat]{padding-bottom:18px}
 .kh b{font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ks{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums;margin-top:4px}
 .ks.neg{color:var(--red)}
-.kl{font-size:11.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+.kl{font-size:11.5px;color:var(--muted);font-weight:600;text-transform:none;letter-spacing:.05em}
 .kio{display:flex;gap:10px;flex-wrap:wrap;font-size:12.5px;font-weight:700;margin-top:6px}
 .in{color:var(--green)}.out{color:var(--red)}
 .kn{font-size:12px;color:var(--muted);margin-top:4px}
@@ -398,7 +398,7 @@ main[data-view=chat]{padding-bottom:18px}
 .rtab,.atbl{width:100%;border-collapse:collapse;font-size:14px}
 .rtab th,.rtab td,.atbl th,.atbl td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
 .rtab th:first-child,.rtab td:first-child,.atbl th,.atbl td{text-align:left}
-.rtab thead th,.atbl thead th{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.rtab thead th,.atbl thead th{font-size:12px;color:var(--muted);text-transform:none;letter-spacing:.04em}
 .rtab .tot td{font-weight:800;border-top:2px solid var(--text)}
 .atbl{min-width:820px}
 .atbl td{vertical-align:middle;white-space:normal}
@@ -916,7 +916,7 @@ dialog::backdrop{background:rgba(10,20,40,.35);backdrop-filter:blur(4px);-webkit
 .hk.hot b{color:var(--red)}.hk.neg b{color:var(--red)}
 .hgrid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:14px;align-items:start}
 .hlist{padding:4px 0 8px;gap:0}
-.hsec{padding:12px 16px 4px;font-size:12px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.hsec{padding:12px 16px 4px;font-size:12px;font-weight:800;letter-spacing:.04em;text-transform:none;color:var(--muted)}
 .hrow,.crow{display:flex;align-items:center;gap:10px;padding:8px 16px;border-top:1px solid var(--line);min-width:0}
 .hsec+.hrow{border-top:0}
 .ht{flex:1;min-width:0;border:0;background:none;padding:0;text-align:left;font:inherit;font-weight:600;color:var(--text);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -2629,7 +2629,7 @@ const LCH = {
 };
 
 // Virtual Work AHG — reminder, global chat (+ whisper), task (+ rutin mingguan) dan kasbon tim. Data di Supabase (proyek ahg-produksi), sinkron real time.
-const BUILD = '20261102-142712';
+const BUILD = '20261110-080250';
 const SB_URL = 'https://herltzublcqpbgyxbbyp.supabase.co', SB_KEY = 'sb_publishable_FMSC0iqDRLsRXtvTtZX0Ow_piPi5bli'; // public key; tables closed, only ahg_* functions
 // File → Google Drive yulius.krisnawan (folder "AHG Produksi", 5 GiB) lewat Edge Function ahg-file: cek login, buka sesi upload Drive
 // (browser kirim byte langsung ke Google), unduh diproksikan per 8 MiB. Cadangan saat Drive terputus: Supabase Storage (bucket ahg-files).
@@ -4574,6 +4574,134 @@ function boot() {
   } else render();
 }
 boot();
+
+// ---------- TEKS PROPER ----------
+// Semua teks di layar + isian (input/textarea) tampil "Seperti Ini", diketik kapital atau kecil hasilnya sama.
+// Singkatan (AMP, SCP, CV, BBM…), satuan simbol (m3, kg), link, email, nama file dan @mention tidak diubah.
+// EXPORT (PDF / Excel / Cetak / Laporan Operasional) TIDAK ikut Proper: datanya dinormalkan ke aturan penulisan laporan —
+// judul/nama/label = kapital tiap kata kecuali kata tugas (di, ke, dari, dan, yang, untuk…), catatan/keterangan/komentar = kalimat biasa.
+const PR = {
+  AC: new Set(('AHG AMP CMP PCP SCP TM WIB WITA WIT PDF WA HP PT CV UD BH DT SO PO DO SJ SPK SPB BBM ID OK ATK APD K3 P3K PPN PPH NPWP NIK ' +
+    'KTP SIM STNK BPKB URL QR RT RW CCTV GPS PLN PDAM AC TV USB HRD GM QC QA SOP BOM SDM PU DPU PUPR SNI ISO PIC HSE MEP SPBU KB MB GB TB ' +
+    'UMKM BUMN CSR KPI SKU NB PS JL').split(' ')),
+  UNIT: new Set(['cm', 'mm', 'km', 'kg', 'mg', 'ml', 'm2', 'm3', 'm²', 'm³', 'cm2', 'cm3', 'mm2']),
+  KT: new Set(('di ke dari dan yang untuk pada dengan atau oleh bagi dalam tentang sebagai serta tetapi agar karena jika kalau maka per ' +
+    'yg dgn utk dr dlm thd terhadap kepada akan the of and to in on at for a an').split(' ')),
+  ROMAN: /^(?:ii|iii|iv|vi|vii|viii|ix|xi|xii|xiii|xiv|xv|xvi|xvii|xviii|xix|xx)$/i,
+  RAW: /^[(\["'“]*(?:https?:\/\/|www\.|#)|[^\s@]+@[^\s@]+\.[a-z]{2,}|\.(?:pdf|docx?|xlsx?|pptx?|csv|txt|jpe?g|png|gif|webp|heic|mp4|mov|zip|rar|dwg|skp|com|net|org|id|io)\b/i,
+  W: /[\p{L}\p{N}][\p{L}\p{N}\p{M}'’]*/gu,
+  codes: new Set(), names: new Set(), cache: new Map(), norm: 0, codesAt: 0
+};
+const prCap = w => w.charAt(0).toUpperCase() + w.slice(1);
+// m: 'p' = Proper (layar), 't' = judul laporan, 's' = kalimat laporan
+function prWord(w, m, dig, before, start) {
+  const lw = w.toLowerCase(), up = w.toUpperCase();
+  if (/\p{N}/u.test(w)) return PR.UNIT.has(lw) ? lw : /^\p{N}/u.test(w) || m !== 'p' ? w : prCap(w);
+  if (PR.UNIT.has(lw) || ((lw === 'm' || lw === 'x') && /\p{N}\s*$/u.test(before))) return lw;
+  if (PR.AC.has(up) || PR.codes.has(up) || (w.length > 1 && PR.ROMAN.test(w))) return up;
+  if (m === 'p') return prCap(lw);
+  if (m === 't') return !start && PR.KT.has(lw) ? lw : prCap(lw);
+  if (w.length === 1 && dig) return w; // M-08, T.15
+  if (start || /[.!?]["')]*\s+["'(“]*$/.test(before) || /\n[\s\-–•*>\d.)]*$/.test(before) || PR.names.has(lw)) return prCap(lw);
+  return lw;
+}
+function prCase(s, m = 'p', field) { // field: isian → @mention (username) tidak diubah
+  s = String(s ?? ''); if (!/\p{L}/u.test(s)) return s;
+  let out = '';
+  for (const ch of s.split(/(\s+)/)) {
+    if (!ch || !/\S/.test(ch) || PR.RAW.test(ch) || ((field || m !== 'p') && /^[(\["'“]*@/.test(ch))) { out += ch; continue; }
+    const dig = /\p{N}/u.test(ch), base = out;
+    out += ch.replace(PR.W, (w, off) => { const before = base + ch.slice(0, off); return prWord(w, m, dig, before, !/[\p{L}\p{N}]/u.test(before)); });
+  }
+  return out;
+}
+const prop = s => { let r = PR.cache.get(s); if (r === undefined) { r = prCase(s, 'p'); if (PR.cache.size > 20000) PR.cache.clear(); PR.cache.set(s, r); } return r; };
+function prCodes() { // kode unit buatan user (mis. BP) tetap kapital
+  if (Date.now() - PR.codesAt < 3000) return; PR.codesAt = Date.now();
+  let k = []; try { if (S.me) k = Object.keys(prodUnits()); } catch {}
+  const sig = k.join(','); if (sig === PR.codesSig) return;
+  PR.codesSig = sig; PR.codes = new Set(k.map(x => x.toUpperCase())); PR.cache.clear();
+}
+
+// ---- layar: teks, placeholder, title, nilai isian ----
+const PR_SKIP = 'script,style,textarea,noscript,code,pre,svg,#print-area,[data-raw],[data-a="openFile"],.pf,.vw-h';
+const PR_RAW_ID = /^(l-user|l-pass2?|l-ref|lk-url|tf-link|fl-name|pw-old|pw-new2?|uf-un-sat|sf-sat-new)$/;
+function prEditable(el) {
+  if (!el || el.readOnly || el.dataset.raw != null || PR_RAW_ID.test(el.id)) return false;
+  if (el.tagName === 'TEXTAREA') return true;
+  return el.tagName === 'INPUT' && /^(text|search)$/.test(el.type) && !/^(numeric|decimal|email|url|tel)$/.test(el.inputMode) && !/username|email|url/.test(el.autocomplete);
+}
+function prField(el) {
+  if (!prEditable(el)) return;
+  const v = el.value, n = el.id === 'uf-un-name' ? v.toUpperCase() : prCase(v, 'p', 1); if (n === v) return;
+  const focus = document.activeElement === el, a = el.selectionStart, b = el.selectionEnd;
+  el.value = n; if (focus && a != null) try { el.setSelectionRange(a, b); } catch {}
+}
+function prAttrs(el) { for (const a of ['placeholder', 'title']) { const v = el.getAttribute(a); if (v) { const n = prop(v); if (n !== v) el.setAttribute(a, n); } } }
+function prNode(n) {
+  if (PR.norm) return;
+  if (n.nodeType === 3) { const p = n.parentElement; if (!p || p.closest(PR_SKIP)) return; const v = prop(n.data); if (v !== n.data) n.data = v; return; }
+  if (n.nodeType !== 1 || n.closest(PR_SKIP)) { if (n.tagName === 'TEXTAREA') { prAttrs(n); prField(n); } return; }
+  const tw = document.createTreeWalker(n, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, { acceptNode: x => {
+    if (x.nodeType === 3) return NodeFilter.FILTER_ACCEPT;
+    if (x.tagName === 'TEXTAREA') { prAttrs(x); prField(x); return NodeFilter.FILTER_REJECT; }
+    if (x.matches(PR_SKIP)) return NodeFilter.FILTER_REJECT;
+    prAttrs(x); if (x.tagName === 'INPUT') prField(x);
+    return NodeFilter.FILTER_SKIP;
+  } });
+  if (n.tagName === 'INPUT') prField(n);
+  prAttrs(n);
+  for (let t = tw.nextNode(); t; t = tw.nextNode()) { const v = prop(t.data); if (v !== t.data) t.data = v; }
+}
+const prObs = new MutationObserver(ms => {
+  prCodes();
+  for (const m of ms) { if (m.type === 'characterData') prNode(m.target); else if (m.type === 'attributes') { if (!m.target.closest(PR_SKIP)) prAttrs(m.target); } else m.addedNodes.forEach(prNode); }
+});
+// mengetik: langsung jadi Proper (kursor tetap); keyboard HP (komposisi) diproses saat kata selesai
+window.addEventListener('input', ev => { if (!ev.isComposing) prField(ev.target); }, true);
+window.addEventListener('compositionend', ev => prField(ev.target), true);
+window.addEventListener('change', ev => prField(ev.target), true);
+window.addEventListener('focusout', ev => prField(ev.target), true);
+const prAll = () => document.querySelectorAll('input,textarea').forEach(prField); // nilai yang diisi lewat kode (pilih @mention, saran) ikut rapi sebelum disimpan
+window.addEventListener('submit', prAll, true);
+window.addEventListener('click', ev => { if (ev.target.closest?.('button,[data-a]')) prAll(); }, true);
+window.addEventListener('keydown', ev => { if (ev.key === 'Enter' && !ev.isComposing) prAll(); }, true);
+prCodes(); prNode(document.body);
+prObs.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['placeholder', 'title'] });
+
+// ---- export: data dinormalkan ke aturan penulisan laporan selama file disusun ----
+const PR_TITLE = { reminder: ['title'], task: ['title'], cashcat: ['name'], link: ['title'], unit: ['basecamp', 'item', 'mcat', 'size'] };
+const PR_SENT = ['note', 'text', 'body'];
+const prDays = 'senin selasa rabu kamis jumat jum\'at sabtu minggu januari februari maret april mei juni juli agustus september oktober november desember jan feb mar apr jun jul agu ags agt sep okt nov des indonesia';
+function prNames(items, users) {
+  const s = new Set(prDays.split(' ')), add = t => String(t || '').toLowerCase().split(/[^\p{L}'’]+/u).forEach(w => { if (w.length >= 3 && !PR.KT.has(w)) s.add(w); });
+  users.forEach(u => { add(u.name); add(u.display); });
+  try { BASECAMPS.forEach(add); } catch {}
+  for (const it of items.values()) if (it.kind === 'unit' && !it.deleted) add(it.data?.basecamp);
+  PR.names = s;
+}
+function prItem(it) {
+  if (!it.data || it.deleted) return it;
+  const d = { ...it.data }, t = PR_TITLE[it.kind] || [];
+  for (const k of t) if (typeof d[k] === 'string') d[k] = prCase(d[k], 't');
+  for (const k of PR_SENT) if (typeof d[k] === 'string') d[k] = prCase(d[k], 's');
+  if (Array.isArray(d.items)) d.items = d.items.map(x => x && typeof x.t === 'string' ? { ...x, t: prCase(x.t, 's') } : x);
+  return { ...it, data: d };
+}
+function prNormal(fn) {
+  return function (...a) {
+    if (PR.norm) return fn.apply(this, a);
+    const items = S.items, users = S.users;
+    prNames(items, users);
+    S.items = new Map([...items].map(([k, it]) => [k, prItem(it)]));
+    S.users = users.map(u => ({ ...u, display: prCase(u.display || u.name, 't') }));
+    PR.norm++;
+    try { return fn.apply(this, a); } finally { PR.norm--; S.items = items; S.users = users; }
+  };
+}
+reportPdf = prNormal(reportPdf); reportXlsx = prNormal(reportXlsx); reportPrint = prNormal(reportPrint);
+unitExport = prNormal(unitExport); remExport = prNormal(remExport);
+lpCollect = prNormal(lpCollect); lpUnits = prNormal(lpUnits); lpRender = prNormal(lpRender);
 </script>
 </body>
 </html>
