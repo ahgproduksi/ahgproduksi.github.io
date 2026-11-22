@@ -1005,6 +1005,30 @@ a.nav{text-decoration:none}
 .btn.cmp-go{text-decoration:none;border-color:color-mix(in srgb,#1f6fc0 45%,var(--g-edge,var(--line)));color:#1f6fc0}
 :root[data-theme="dark"] .btn.cmp-go{color:#7db4ee}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .btn.cmp-go{color:#7db4ee}}
+
+/* ---------- Proyeksi Produksi (jadwal pengiriman) ---------- */
+.pjl{display:flex;flex-direction:column;gap:14px;margin-top:6px}
+.pjw{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:var(--shadow)}
+.pjw-h{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;padding:10px 14px;background:color-mix(in srgb,var(--acc) 12%,transparent);border-bottom:1px solid var(--line);font-size:14px}
+.pjw-h .sp,.pjd-h .sp{flex:1}
+.pjw-t{font-size:12.5px;font-weight:700;color:var(--acc)}
+.pjd{border-top:1px solid var(--line)}
+.pjw-h+.pjd{border-top:0}
+.pjd-h{display:flex;align-items:center;flex-wrap:wrap;gap:2px 8px;padding:6px 10px 6px 14px;background:var(--soft);font-size:13.5px}
+.pjd.now .pjd-h{box-shadow:inset 3px 0 0 var(--acc)}
+.pjd.now .pjd-h b::after{content:' · hari ini';color:var(--acc);font-size:12px}
+.pjd.kosong .pjd-h{background:none}
+.pjd.kosong .pjd-h b{color:var(--muted);font-weight:600}
+.pjr{align-items:center}
+.pj-jam{flex:none;width:44px;font-weight:800;font-variant-numeric:tabular-nums;font-size:13.5px}
+.pj-e{padding:12px 14px;margin:0}
+.pj-chk{display:inline-flex!important;flex-direction:row!important;align-items:center;gap:6px;font-size:13px;font-weight:600;cursor:pointer}
+.pjf{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:10px;display:flex;flex-direction:column;gap:8px;background:color-mix(in srgb,var(--soft) 45%,transparent)}
+.pjf-h{display:flex;justify-content:space-between;align-items:center;font-size:13.5px}
+#pf-rows .pjf:only-child .pjf-x{display:none}
+.pjf input[hidden]{display:none}
+.pj-add{margin-top:10px;align-self:flex-start}
+@media (max-width:700px){ .pjr .pj-jam{width:40px;font-size:12.5px} .pjd-h{padding-left:12px} }
 </style>
 </head>
 <body>
@@ -1953,7 +1977,7 @@ function nInfo(it) { // [ikon, kalimat aksi, judul/isi]
   if (!it._nm && it.kind !== 'msg' && nActor(it) === it.owner && nMent(it)) { // ditandai di reminder/task/komentar/kas/unit
     if (it.kind === 'comment') { const r = S.items.get(d.rem || d.task); return ['📣', `menandai kamu di komentar ${d.rem ? 'reminder' : 'task'} “${cut(r?.data.title || '…')}”`, cut(d.text)]; }
     const [, , tx] = nInfo({ ...it, data: { ...d }, kind: it.kind, _nm: 1 });
-    return ['📣', `menandai kamu di ${{ reminder: 'reminder', task: 'task', cash: 'transaksi kas', unit: d.cat === 'stok' ? 'stok material' : 'input produksi' }[it.kind] || 'catatan'}`, tx];
+    return ['📣', `menandai kamu di ${{ reminder: 'reminder', task: 'task', cash: 'transaksi kas', unit: d.cat === 'stok' ? 'stok material' : d.cat === 'proyeksi' ? 'jadwal proyeksi produksi' : 'input produksi' }[it.kind] || 'catatan'}`, tx];
   }
   switch (it.kind) {
     case 'reminder': return ['⏰', d.done && nActor(it) === d.doneBy && !isNew ? 'menyelesaikan reminder' : isNew ? 'membuat reminder' : 'memperbarui reminder', `${cut(d.title)}${d.date ? ' · ' + dShort(d.date) + (d.time ? ' ' + d.time : '') : ''}`];
@@ -1961,7 +1985,8 @@ function nInfo(it) { // [ikon, kalimat aksi, judul/isi]
     case 'comment': { const r = S.items.get(d.rem || d.task); return ['💬', `mengomentari ${d.rem ? 'reminder' : 'task'} “${cut(r?.data.title || '…')}”`, cut(d.text)]; }
     case 'cash': return ['💰', isNew ? 'menambahkan transaksi kas' : 'memperbarui transaksi kas', `${d.type === 'in' ? '⬇ masuk' : '⬆ keluar'} Rp ${num(d.amount || 0)}${d.note ? ' · ' + cut(d.note) : ''}`];
     case 'cashcat': return ['🏷', isNew ? 'menambah kategori kas' : 'mengubah kategori kas', cut(d.name)];
-    case 'unit': return d.cat === 'stok' ? ['📦', isNew ? `mencatat stok ${d.dir === 'out' ? 'keluar' : 'masuk'}` : 'memperbarui stok material', `${cut(d.item)} · ${d.volume ?? ''} ${d.sat || ''} · ${d.basecamp || ''}`]
+    case 'unit': if (d.cat === 'proyeksi') return ['📅', isNew ? 'menambah jadwal kirim' : 'memperbarui jadwal kirim', `${d.unit || ''} · ${cut(d.proyek || '')} · ${d.spec || ''} · ${d.volume ?? ''} ${d.sat || ''} · ${d.basecamp || ''}${d.date ? ' · ' + dShort(d.date) + (d.jam ? ' ' + d.jam.replace(':', '.') : '') : ''}`];
+      return d.cat === 'stok' ? ['📦', isNew ? `mencatat stok ${d.dir === 'out' ? 'keluar' : 'masuk'}` : 'memperbarui stok material', `${cut(d.item)} · ${d.volume ?? ''} ${d.sat || ''} · ${d.basecamp || ''}`]
       : ['🏭', isNew ? 'menginput produksi' : 'memperbarui produksi', `${d.unit || ''} ${d.volume ?? ''} ${d.sat || ''} · ${d.basecamp || ''}${d.date ? ' · ' + dShort(d.date) : ''}`];
     case 'link': return ['🔗', isNew ? 'menambahkan link kerja' : 'memperbarui link kerja', cut(d.title || d.url)];
     case 'msg': return [it.to ? '🤫' : '📣', it.to ? (nMent(it) ? 'menandai kamu di whisper' : 'mengirim whisper') : 'menandai kamu di Global Chat', cut(d.text || (d.files?.length ? '📎 lampiran' : ''))];
@@ -1983,6 +2008,7 @@ function nGo(it) {
   else if (it.kind === 'comment') { if (par.kind === 'reminder') { S.rem.open[par.id] = 1; remShow(par); } else { go('task'); openTask(par.id); } }
   else if (it.kind === 'cash') { const C = S.cash; if (C.cat && C.cat !== d.cat) C.cat = ''; C.who = ''; C.q = ''; showPeriod(C, d.date); go('cash'); }
   else if (it.kind === 'cashcat') { S.cash.cat = it.id; go('cash'); }
+  else if (it.kind === 'unit' && d.cat === 'proyeksi') { pjInit(); PJ.m = String(d.date || today()).slice(0, 7); PJ.w = 0; PJ.u = ''; if (PJ.bc && PJ.bc !== d.basecamp) PJ.bc = ''; go('proyeksi'); }
   else if (it.kind === 'unit') { const U = S.unit; U.cat = d.cat || 'produksi'; U.bc = U.u = U.mk = U.q = ''; showPeriod(U, d.date); go('unit'); }
   else if (it.kind === 'link') { S.task.links = true; go('task'); }
   else if (it.kind === 'msg') {
@@ -2628,8 +2654,397 @@ const LCH = {
   lpRef: el => { const v = el.value; if (!v) return; LP.ref = LP.kind === 'month' ? v + '-01' : LP.kind === 'year' ? v + '-01-01' : v; $('#lp-sum').innerHTML = lpSumHtml(); },
 };
 
+// ---------- PROYEKSI PRODUKSI (jadwal pengiriman per basecamp) ----------
+// Disimpan sebagai kind 'unit' dengan cat 'proyeksi' (tanpa ubah SQL):
+// data { cat:'proyeksi', date, basecamp, unit, sat, proyek, spec, jam 'HH:MM', volume, note }
+// Spesifikasi default = Price List Produk AHG (Google Sheet "Price List AMP/CMP/SCP/PCP", 22 Nov 2026);
+// spesifikasi tambahan per unit = unitopt { type:'pjspec-<UNIT>', name } (hapus: 'pjspec-<UNIT>hide').
+const PJ_CMP = [['B-0', 0], ['K-100', 8], ['K-125', 10], ['K-150', 12], ['K-175', 15], ['K-200', 17], ['K-225', 19], ['K-250', 21], ['K-275', 23], ['K-300', 25], ['K-325', 27],
+  ['K-350', 29], ['K-375', 31], ['K-400', 33], ['K-425', 35], ['K-450', 37], ['K-475', 39], ['K-500', 42], ['FS-45', 29], ['FS-47', 30], ['Mortar 1:5', -1]];
+const PJ_SPEC = {
+  AMP: ['AC BASE', 'AC BC', 'AC BC MOD', 'AC WC', 'AC WC MOD', 'HRS', 'HRS WC', 'SANDSHEET', 'SANDSHEET-A', 'SANDSHEET-B', 'AC BASE Asbuton 50/30', 'AC BC Asbuton 50/30', 'AC WC Asbuton 50/30', 'ATB'],
+  CMP: PJ_CMP.map(([k, fc]) => /^K-/.test(k) ? `fc ${fc} (${k})` : /^FS-/.test(k) ? `${k} (fc ${fc})` : k),
+  SCP: ['Split 1/1', 'Split 1/2', 'Split 2/3', 'Split 3/5', 'Abu Batu', 'Pasir (Hasil SCP)', 'Ladu / Ondol', 'LPA (Gembur)', 'LPB (Gembur)', 'LPS (Gembur)', 'CTB (Gembur)'],
+  PCP: ['U-Ditch 30x30x120 t5', 'U-Ditch 30x40x120 t5', 'U-Ditch 30x40x120 t10', 'U-Ditch 40x40x120 t5', 'U-Ditch 40x50x120 t15', 'U-Ditch 40x60x120 t7', 'U-Ditch 40x60x120 t10',
+    'U-Ditch 50x50x120 t7', 'U-Ditch 50x70x120 t10', 'U-Ditch 50x70x120 t15', 'U-Ditch 60x70x120 t15', 'U-Ditch 60x80x120 t10', 'U-Ditch 60x80x120 t15', 'U-Ditch 80x80x120 t10',
+    'U-Ditch 80x100x120 t10', 'U-Ditch 80x100x120 t15', 'Cover 30x8x60', 'Cover 30x10x60', 'Cover 30x10x120', 'Cover 30x15x120', 'Cover 40x10x120', 'Cover 40x15x120', 'Cover 50x10x120',
+    'Cover 50x15x60', 'Cover 50x15x120', 'Cover 60x15x60', 'Cover 80x10x120', 'Cover 80x15x60', 'Cover 80x15x120', 'Cover 80x25x60', 'Cover 80x25x120', 'Cover 100x15x120',
+    'Box Culvert 40x40x120 t12', 'Box Culvert 50x50x120 t16', 'Box Culvert 60x60x120 t16', 'Box Culvert 80x80x100 t20', 'Box Culvert 100x100x100 t15', 'Box Culvert 100x100x120 t20',
+    'Box Culvert 120x120x100 t15', 'Kansteen 7/14x34x50', 'Kansteen 10/15x30x50', 'Kansteen 10/15x40x50', 'Kansteen 18/21x30x50', 'Kansteen 18/21x30x60', 'Kansteen 18/21x35x60',
+    'Kansteen 18/21x40x50', 'Kansteen 20/25x45x50', 'Pagar Panel 40x5x240', 'Kolom Panel 18x18x320', 'Linning Irigasi 50x60x7', 'Patok Pengarah 15x15x150']
+};
+const PJ_ORD = ['AMP', 'CMP', 'SCP', 'PCP'];
+const PJ_COL = { AMP: '#475569', CMP: '#2563eb', SCP: '#a16207', PCP: '#d97706' };
+const PJ_JAMS = Array.from({ length: 48 }, (_, i) => String(i >> 1).padStart(2, '0') + ':' + (i & 1 ? '30' : '00'));
+const PJ = { init: 0, bc: '', m: '', u: '', w: 0, empty: 1, exp: { scope: 'month', d: '', m: '', w: 1, bc: '', u: '', empty: 0 } };
+function pjInit() { // LS / today() baru ada setelah app.js dimuat
+  if (PJ.init) return; PJ.init = 1;
+  const bc = LS.get('pj.bc'); PJ.bc = bc != null ? bc : pjDefBc(); PJ.m = today().slice(0, 7); PJ.empty = LS.get('pj.empty') !== '0';
+}
+const pjDefBc = () => basecamps().find(b => /^bugel/i.test(b)) || basecamps()[0] || '';
+const pjOrd = u => { const i = PJ_ORD.indexOf(u); return i < 0 ? 9 : i; };
+const pjSpecs = u => optList('pjspec-' + u, PJ_SPEC[u] || []);
+const pjAll = () => unitTx().filter(t => t.data.cat === 'proyeksi');
+const pjProjects = () => [...new Set(pjAll().map(t => t.data.proyek).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'id'));
+const pjJam = j => j ? j.replace(':', '.') : '—';
+const pjDayLong = s => { const d = pYmd(s); return `${DAYS[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`; };
+const pjMonthLabel = m => { const [y, mo] = m.split('-').map(Number); return MONTHS[mo - 1] + ' ' + y; };
+function pjRange(s, e) {
+  const a = pYmd(s), b = pYmd(e);
+  if (s === e) return pjDayLong(s);
+  return `${DSH[a.getDay()]} ${a.getDate()}${a.getMonth() !== b.getMonth() ? ' ' + MSH[a.getMonth()] : ''} – ${DSH[b.getDay()]} ${b.getDate()} ${MSH[b.getMonth()]} ${b.getFullYear()}`;
+}
+function pjWeeks(m) { // minggu Senin–Minggu, dipotong batas bulan → [{ i, days: [ymd…] }]
+  const [y, mo] = m.split('-').map(Number), last = new Date(y, mo, 0).getDate(), out = []; let cur = null;
+  for (let d = 1; d <= last; d++) { const dt = new Date(y, mo - 1, d); if (!cur || dt.getDay() === 1) out.push(cur = { i: out.length + 1, days: [] }); cur.days.push(ymd(dt)); }
+  return out;
+}
+const pjWeekOf = (m, d) => pjWeeks(m).find(w => w.days.includes(d))?.i || 0;
+function pjRows(o) { // o { bc, s, e (inklusif), u }
+  return pjAll().filter(t => { const x = t.data; return (!o.bc || x.basecamp === o.bc) && x.date >= o.s && x.date <= o.e && (!o.u || x.unit === o.u); })
+    .sort((a, b) => a.data.date.localeCompare(b.data.date) || pjOrd(a.data.unit) - pjOrd(b.data.unit) || a.data.unit.localeCompare(b.data.unit)
+      || (a.data.jam || '99').localeCompare(b.data.jam || '99') || (a.data.proyek || '').localeCompare(b.data.proyek || '') || a.created - b.created);
+}
+function pjTot(rows) { // total per unit (satuan tidak pernah dijumlah lintas unit)
+  const m = new Map();
+  for (const t of rows) { const x = t.data, k = x.unit + '|' + (x.sat || ''), a = m.get(k) || { unit: x.unit, sat: x.sat || '', v: 0, n: 0 }; a.v += Number(x.volume) || 0; a.n++; m.set(k, a); }
+  return [...m.values()].sort((a, b) => pjOrd(a.unit) - pjOrd(b.unit) || a.unit.localeCompare(b.unit));
+}
+const pjTotTxt = rows => pjTot(rows).map(a => `${a.unit} ${vol(a.v)} ${a.sat}`).join(' · ');
+
+// ---- halaman ----
+function vProyeksi() {
+  pjInit();
+  const bcs = basecamps(), pu = prodUnits(), weeks = pjWeeks(PJ.m); if (PJ.bc && !bcs.includes(PJ.bc)) bcs.push(PJ.bc);
+  if (PJ.w > weeks.length) PJ.w = 0;
+  const ws = PJ.w ? [weeks[PJ.w - 1]] : weeks, s = ws[0].days[0], e = ws.at(-1).days.at(-1);
+  const rows = pjRows({ bc: PJ.bc, s, e, u: PJ.u }), byDay = {}, td = today();
+  for (const t of rows) (byDay[t.data.date] ||= []).push(t);
+  return `<div class="head"><h1>📅 Proyeksi Produksi <span class="hc">jadwal pengiriman per basecamp</span></h1><div class="tools"><button type="button" class="btn primary" data-a="pjNew">＋ Jadwal kirim</button><button type="button" class="btn" data-a="pjExpDlg" title="Cetak jadwal pengiriman sebagai PDF atau gambar JPG">🖨 PDF / JPG</button></div></div>
+  <section class="card cflt">
+    <select id="pj-bc" data-ch="pjBc" data-keep="0" title="Basecamp"><option value="">Semua basecamp</option>${bcs.map(b => `<option value="${esc(b)}" ${PJ.bc === b ? 'selected' : ''}>${esc(b)}</option>`).join('')}</select>
+    <span class="pnav"><button type="button" class="ib" data-a="pjNav" data-n="-1" title="Bulan sebelumnya">‹</button><input type="month" id="pj-m" data-ch="pjM" data-keep="0" value="${PJ.m}"><button type="button" class="ib" data-a="pjNav" data-n="1" title="Bulan berikutnya">›</button></span>
+    <select id="pj-w" data-ch="pjW" data-keep="0" title="Minggu"><option value="0">Sebulan (semua minggu)</option>${weeks.map(w => `<option value="${w.i}" ${PJ.w === w.i ? 'selected' : ''}>Minggu ke-${w.i} · ${esc(pjRange(w.days[0], w.days.at(-1)))}</option>`).join('')}</select>
+    <select id="pj-u" data-ch="pjU" data-keep="0" title="Unit produksi"><option value="">Semua unit</option>${Object.keys(pu).map(k => `<option value="${esc(k)}" ${PJ.u === k ? 'selected' : ''}>${esc(k)}</option>`).join('')}</select>
+    <label class="pj-chk"><input type="checkbox" id="pj-empty" data-ch="pjEmpty" data-keep="0" ${PJ.empty ? 'checked' : ''}> Tampilkan hari kosong</label>
+  </section>
+  ${rows.length ? `<div class="ugrid">${pjTot(rows).map(a => `<button type="button" class="ucard ${PJ.u === a.unit ? 'on' : ''}" data-a="pjPick" data-u="${esc(a.unit)}"><span class="ub"><span class="ubadge sm u-${esc(a.unit)}">${esc(a.unit)}</span> <span class="muted small">${esc(pu[a.unit]?.name || '')}</span></span><span class="uv">${vol(a.v)} <small>${esc(a.sat)}</small></span><span class="muted small">${a.n} pengiriman</span></button>`).join('')}</div>` : ''}
+  <p class="muted small">📍 <b>${esc(PJ.bc || 'Semua basecamp')}</b> · ${esc(PJ.w ? `Minggu ke-${PJ.w} · ${pjRange(s, e)}` : pjMonthLabel(PJ.m))} · ${rows.length} jadwal pengiriman</p>
+  <div class="pjl">${ws.map(w => {
+    const ds = w.days[0], de = w.days.at(-1), wr = rows.filter(t => t.data.date >= ds && t.data.date <= de);
+    const days = w.days.map(d => { const g = byDay[d] || []; if (!g.length && !PJ.empty) return '';
+      return `<div class="pjd${d === td ? ' now' : ''}${g.length ? '' : ' kosong'}"><div class="pjd-h"><b>${esc(pjDayLong(d))}</b>${g.length ? `<span class="muted small">${g.length} kirim · ${esc(pjTotTxt(g))}</span>` : '<span class="muted small">belum ada jadwal</span>'}<span class="sp"></span>
+        ${g.length ? `<button type="button" class="ib sm" data-a="pjCopy" data-d="${d}" title="Salin jadwal hari ini ke tanggal lain">⧉</button>` : ''}<button type="button" class="ib sm" data-a="pjNew" data-d="${d}" title="Tambah jadwal kirim di tanggal ini">＋</button></div>
+        ${g.map(pjRowHtml).join('')}</div>`; }).join('');
+    return `<section class="pjw"><div class="pjw-h"><b>Minggu ke-${w.i}</b><span class="muted small">${esc(pjRange(ds, de))}</span><span class="sp"></span><span class="pjw-t">${wr.length ? `${wr.length} kirim · ${esc(pjTotTxt(wr))}` : 'Belum ada jadwal'}</span></div>
+      ${days || '<p class="pj-e muted small">Belum ada jadwal pengiriman di minggu ini.</p>'}</section>`; }).join('')}</div>`;
+}
+function pjRowHtml(t) {
+  const x = t.data, ed = canEdit(t);
+  return `<div ${nfa(t.id)} class="tx pjr${fl(t.id)}${mentionsMe(t) ? ' ment' : ''}${ed ? ' ed' : ''}" ${ed ? `data-a="pjEdit" data-id="${t.id}"` : ''}><span class="pj-jam">${esc(pjJam(x.jam))}</span><span class="ubadge u-${esc(x.unit)}">${esc(x.unit)}</span>
+    <span class="ti"><b>${esc(x.proyek || '—')}</b><small><span data-raw>${esc(x.spec || '')}</span>${!PJ.bc ? ' · 📍 ' + esc(x.basecamp) : ''} · ${esc(uname(t.owner))}</small>${x.note ? `<small class="un">${withMentions(linkify(x.note))}</small>` : ''}</span>
+    <span class="ta">${vol(x.volume)} <small>${esc(x.sat || '')}</small></span></div>`;
+}
+
+// ---- dialog input (satu tanggal + basecamp, beberapa baris pengiriman) ----
+const pjDefDate = () => PJ.m === today().slice(0, 7) ? today() : PJ.m + '-01';
+function pjSpecOpts(u, sel) {
+  if (!u) return '<option value="">Pilih unit dulu…</option>';
+  const l = pjSpecs(u); if (sel && !l.includes(sel)) l.unshift(sel);
+  return `<option value="">Pilih spesifikasi…</option>${l.map(z => `<option value="${esc(z)}" ${sel === z ? 'selected' : ''}>${esc(z)}</option>`).join('')}<option value="+">＋ Spesifikasi lain…</option>`;
+}
+function pjFormRow(x, n) {
+  const pu = prodUnits(), projs = pjProjects(); if (x.proyek && !projs.includes(x.proyek)) projs.unshift(x.proyek);
+  return `<div class="pjf"><div class="pjf-h"><b>Pengiriman <span class="pjf-n">${n}</span></b><button type="button" class="ib sm pjf-x" data-a="pjRowDel" title="Hapus baris ini">✕</button></div>
+    <div class="row2"><label>Unit produksi<select class="pf-unit" data-ch="pjFUnit"><option value="">Pilih unit…</option>${Object.entries(pu).map(([k, v]) => `<option value="${esc(k)}" ${x.unit === k ? 'selected' : ''}>${esc(k)}${v.name ? ' — ' + esc(v.name) : ''}</option>`).join('')}</select></label>
+      <label>Jam kirim<select class="pf-jam"><option value="">Pilih jam…</option>${PJ_JAMS.map(j => `<option value="${j}" ${x.jam === j ? 'selected' : ''}>${pjJam(j)}</option>`).join('')}</select></label></div>
+    <label>Proyek tujuan<select class="pf-proj" data-ch="pjFProj"><option value="">Pilih proyek…</option>${projs.map(p => `<option value="${esc(p)}" ${x.proyek === p ? 'selected' : ''}>${esc(p)}</option>`).join('')}<option value="+">＋ Proyek baru…</option></select></label>
+    <input class="pf-proj-new" maxlength="80" placeholder="Nama proyek baru, mis. Jalan Wates – Purworejo" hidden>
+    <label>Spesifikasi / mutu<select class="pf-spec" data-ch="pjFSpec" data-raw>${pjSpecOpts(x.unit, x.spec)}</select></label>
+    <input class="pf-spec-new" maxlength="80" placeholder="Spesifikasi lain, mis. AC WC Polimer" data-raw hidden>
+    <div class="row2"><label>Volume<span class="volin"><input class="pf-vol" inputmode="decimal" placeholder="0" value="${x.volume != null && x.volume !== '' ? esc(String(x.volume).replace('.', ',')) : ''}"><b class="pf-sat">${esc(x.sat || pu[x.unit]?.sat || '')}</b></span></label>
+      <label>Keterangan (opsional)<input class="pf-note" maxlength="200" value="${esc(x.note || '')}" placeholder="mis. 2 rit, pengecoran plat"></label></div></div>`;
+}
+function pjDialog(t, date) {
+  pjInit();
+  const d = t ? { ...t.data, basecamp: bcNorm(t.data.basecamp) } : { date: date || pjDefDate(), basecamp: PJ.bc || pjDefBc(), unit: PJ.u || '' };
+  const bcs = basecamps(); if (d.basecamp && !bcs.includes(d.basecamp)) bcs.push(d.basecamp);
+  S.dlg = { type: 'pj', id: t?.id || null };
+  openDlg(`<form class="dlg" id="pj-form"><h2>${t ? '✏️ Ubah jadwal kirim' : '📅 Jadwal kirim'}</h2>
+    <div class="row2"><label>Tanggal kirim<input id="pf-date" type="date" value="${esc(d.date)}" required></label>
+      <label>Basecamp<select id="pf-bc" data-ch="pjFBc">${bcs.map(b => `<option value="${esc(b)}" ${d.basecamp === b ? 'selected' : ''}>${esc(b)}</option>`).join('')}<option value="+">＋ Basecamp lain…</option></select></label></div>
+    <label id="pf-bc-new-l" hidden>Nama basecamp baru<input id="pf-bc-new" maxlength="60" placeholder="mis. Klontong"></label>
+    <div id="pf-rows">${pjFormRow(d, 1)}</div>
+    ${t ? '' : '<button type="button" class="btn sm pj-add" data-a="pjRowAdd">＋ Tambah pengiriman lain (tanggal &amp; basecamp sama)</button>'}
+    ${t ? `<p class="muted small">Dicatat oleh ${esc(uname(t.owner))} · ${dtText(t.created)}</p>` : ''}
+    <div class="dlg-f">${t ? `<button type="button" class="btn danger" data-a="pjDel" data-id="${t.id}">Hapus</button>` : ''}<span class="sp"></span><button type="button" class="btn" data-a="close">Batal</button><button class="btn primary" type="submit">Simpan</button></div>
+  </form>`);
+}
+function pjSave() {
+  let bc = $('#pf-bc').value;
+  if (bc === '+') { bc = $('#pf-bc-new').value.trim(); if (!bc) return toast('Isi nama basecamp baru.', 'warn'); }
+  if (!bc) return toast('Pilih basecamp.', 'warn');
+  const date = $('#pf-date').value; if (!date) return toast('Isi tanggal kirim.', 'warn');
+  const pu = prodUnits(), out = [], rs = $$('#pf-rows .pjf');
+  for (const [i, r] of rs.entries()) {
+    const n = rs.length > 1 ? `Pengiriman ${i + 1}: ` : '', unit = $('.pf-unit', r).value;
+    if (!unit) return toast(n + 'pilih unit produksi.', 'warn');
+    const jam = $('.pf-jam', r).value; if (!jam) return toast(n + 'pilih jam kirim.', 'warn');
+    let proyek = $('.pf-proj', r).value; if (proyek === '+') proyek = $('.pf-proj-new', r).value.trim(); if (!proyek) return toast(n + 'isi proyek tujuan.', 'warn');
+    let spec = $('.pf-spec', r).value, add = false; if (spec === '+') { spec = $('.pf-spec-new', r).value.trim(); add = true; } if (!spec) return toast(n + 'pilih spesifikasi.', 'warn');
+    const volume = parseVol($('.pf-vol', r).value); if (!(volume > 0)) return toast(n + 'isi volume.', 'warn');
+    out.push({ add, x: { unit, sat: pu[unit]?.sat || '', proyek, spec, jam, volume, note: $('.pf-note', r).value.trim() } });
+  }
+  if (!basecamps().includes(bc)) create('unitopt', { type: 'basecamp', name: bc }, { quiet: 1 });
+  for (const { add, x } of out) if (add && !pjSpecs(x.unit).includes(x.spec)) create('unitopt', { type: 'pjspec-' + x.unit, name: x.spec }, { quiet: 1 });
+  const t = S.dlg?.id ? S.items.get(S.dlg.id) : null;
+  out.forEach(({ x }, i) => { const data = { cat: 'proyeksi', date, basecamp: bc, ...x }; if (t && i === 0) put({ ...t, data }, true); else create('unit', data, { quiet: 1 }); });
+  PJ.m = date.slice(0, 7); if (PJ.bc && PJ.bc !== bc) PJ.bc = bc; if (PJ.w && pjWeekOf(PJ.m, date) !== PJ.w) PJ.w = 0; if (PJ.u && out.some(o => o.x.unit !== PJ.u)) PJ.u = '';
+  closeAll(); render();
+  toast(`${t ? 'Jadwal kirim diperbarui' : out.length + ' jadwal kirim tersimpan'} · ${esc(pjDayLong(date))} · ${esc(bc)}`, 'info', null, 3500);
+}
+async function pjCopy(d) {
+  const src = pjRows({ bc: PJ.bc, s: d, e: d, u: PJ.u }); if (!src.length) return;
+  const nx = ymd(new Date(pYmd(d).getTime() + 864e5 + 36e5));
+  const ok = await confirmDlg(`⧉ Salin <b>${src.length} jadwal kirim</b> ${esc(pjDayLong(d))}${PJ.bc ? ' · ' + esc(PJ.bc) : ''}${PJ.u ? ' · ' + esc(PJ.u) : ''} ke tanggal:`, 'Salin', false, `<input type="date" id="pjc-d" class="full" value="${nx}">`);
+  const to = ok ? $('#pjc-d')?.value : ''; if (!to) return;
+  for (const t of src) { const { cat, basecamp, unit, sat, proyek, spec, jam, volume, note } = t.data; create('unit', { cat, date: to, basecamp, unit, sat, proyek, spec, jam, volume, note: note || '' }, { quiet: 1 }); }
+  PJ.m = to.slice(0, 7); if (PJ.w && pjWeekOf(PJ.m, to) !== PJ.w) PJ.w = 0; render();
+  toast(`${src.length} jadwal disalin ke ${esc(pjDayLong(to))}.`, 'info', null, 3500);
+}
+
+// ---- cetak PDF / JPG ----
+function pxRefHtml() {
+  const E = PJ.exp;
+  if (E.scope === 'day') return `<label>Tanggal<input type="date" id="px-d" value="${E.d}"></label>`;
+  if (E.scope === 'week') { const ws = pjWeeks(E.m); if (E.w > ws.length) E.w = 1;
+    return `<div class="row2"><label>Bulan<input type="month" id="px-m" data-ch="pxM" value="${E.m}"></label><label>Minggu<select id="px-w">${ws.map(w => `<option value="${w.i}" ${E.w === w.i ? 'selected' : ''}>Minggu ke-${w.i} · ${esc(pjRange(w.days[0], w.days.at(-1)))}</option>`).join('')}</select></label></div>`; }
+  return `<label>Bulan<input type="month" id="px-m" value="${E.m}"></label>`;
+}
+function pxRead() { const E = PJ.exp, v = id => $('#' + id)?.value;
+  E.bc = v('px-bc') ?? E.bc; E.u = v('px-u') ?? E.u; E.empty = $('#px-empty')?.checked ? 1 : 0;
+  if (v('px-d')) E.d = v('px-d'); if (v('px-m')) E.m = v('px-m'); if (v('px-w')) E.w = Number(v('px-w')); }
+function pjExpDialog() {
+  pjInit(); const E = PJ.exp, td = today(), bcs = basecamps(), pu = prodUnits();
+  Object.assign(E, { bc: PJ.bc, u: PJ.u, m: PJ.m, scope: PJ.w ? 'week' : 'month', w: PJ.w || pjWeekOf(PJ.m, td) || 1, d: pjDefDate() });
+  if (E.bc && !bcs.includes(E.bc)) bcs.push(E.bc);
+  openDlg(`<form class="dlg" id="pj-exp"><h2>🖨 Cetak jadwal pengiriman</h2>
+    <div class="row2"><label>Basecamp<select id="px-bc"><option value="">Semua basecamp</option>${bcs.map(b => `<option value="${esc(b)}" ${E.bc === b ? 'selected' : ''}>${esc(b)}</option>`).join('')}</select></label>
+      <label>Unit produksi<select id="px-u"><option value="">Semua unit</option>${Object.keys(pu).map(k => `<option value="${esc(k)}" ${E.u === k ? 'selected' : ''}>${esc(k)}</option>`).join('')}</select></label></div>
+    <label>Cakupan jadwal</label>
+    <div class="xopts">${[['day', '📆 Per hari'], ['week', '🗓 Per minggu'], ['month', '📅 Sebulan (rincian per minggu)']].map(([k, l]) => `<label class="xo"><input type="radio" name="px-sc" value="${k}" data-ch="pxSc" ${E.scope === k ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>
+    <div id="px-ref">${pxRefHtml()}</div>
+    <label class="pj-chk"><input type="checkbox" id="px-empty" ${E.empty ? 'checked' : ''}> Tampilkan juga hari tanpa jadwal</label>
+    <p class="muted small">PDF = A4 mendatar siap cetak (kop, rincian per hari, rekap &amp; tanda tangan). JPG = satu gambar panjang, praktis dikirim lewat WhatsApp.</p>
+    <div class="dlg-f"><button type="button" class="btn" data-a="close">Batal</button><span class="sp"></span><button type="button" class="btn" data-a="pjExp" data-f="jpg">🖼 JPG</button><button type="button" class="btn primary" data-a="pjExp" data-f="pdf">📕 PDF</button></div>
+  </form>`);
+}
+function pjPeriod() { // dari dialog → { bc, u, empty, scope, s, e, label, range, weeks }
+  pxRead(); const E = PJ.exp, P = { bc: E.bc, u: E.u, empty: E.empty, scope: E.scope };
+  if (E.scope === 'day') return { ...P, s: E.d, e: E.d, label: pjDayLong(E.d), range: pjDayLong(E.d), weeks: null, key: E.d };
+  const ws = pjWeeks(E.m);
+  if (E.scope === 'week') { const w = ws[(E.w || 1) - 1] || ws[0]; return { ...P, s: w.days[0], e: w.days.at(-1), label: `Minggu ke-${w.i} · ${pjMonthLabel(E.m)}`, range: pjRange(w.days[0], w.days.at(-1)), weeks: [w], key: `${E.m}-minggu-${w.i}` }; }
+  return { ...P, s: ws[0].days[0], e: ws.at(-1).days.at(-1), label: pjMonthLabel(E.m), range: pjRange(ws[0].days[0], ws.at(-1).days.at(-1)), weeks: ws, key: E.m };
+}
+function pjCollect(P) { // data siap cetak (dibungkus prNormal di proper.js → tulisan laporan normal)
+  const rows = pjRows(P).map(t => ({ ...t.data, by: uname(t.owner) })), days = new Map();
+  for (const x of rows) (days.get(x.date) || days.set(x.date, []).get(x.date)).push(x);
+  const T = l => pjTot(l.map(data => ({ data })));
+  const spec = new Map(), proj = new Map();
+  for (const x of rows) { const v = Number(x.volume) || 0;
+    const ks = [x.unit, x.spec, x.sat].join('|'), a = spec.get(ks) || { unit: x.unit, spec: x.spec, sat: x.sat, v: 0, n: 0 }; a.v += v; a.n++; spec.set(ks, a);
+    const kp = [x.proyek, x.unit, x.spec, x.sat].join('|'), b = proj.get(kp) || { proyek: x.proyek, unit: x.unit, spec: x.spec, sat: x.sat, v: 0, n: 0 }; b.v += v; b.n++; proj.set(kp, b); }
+  const so = (a, b) => pjOrd(a.unit) - pjOrd(b.unit) || a.unit.localeCompare(b.unit);
+  return { P, rows, days, T, tot: T(rows), spec: [...spec.values()].sort((a, b) => so(a, b) || a.spec.localeCompare(b.spec)),
+    proj: [...proj.values()].sort((a, b) => a.proyek.localeCompare(b.proyek, 'id') || so(a, b) || a.spec.localeCompare(b.spec)),
+    units: prodUnits(), maker: uname(S.me.name), at: new Date() };
+}
+
+// Mesin gambar: daftar blok (tinggi tetap) → halaman A4 mendatar (PDF) atau satu gambar panjang (JPG).
+const PX = { W: 1123, H: 794, M: 34, F: '"Helvetica Neue", Helvetica, Arial, sans-serif', NAVY: '#1e3a5f', LINE: '#d5dbe3', SOFT: '#eef2f7', MUTED: '#64748b', INK: '#111827' };
+const pxCol = u => PJ_COL[u] || '#0f766e';
+function pxFont(c, o) { c.font = `${o.b ? 700 : 400} ${o.s || 12}px ${PX.F}`; }
+function pxT(c, s, x, y, o = {}) {
+  pxFont(c, o); c.fillStyle = o.c || PX.INK; c.textAlign = o.a === 'r' ? 'right' : o.a === 'c' ? 'center' : 'left'; c.textBaseline = 'middle';
+  s = String(s ?? ''); if (o.max && c.measureText(s).width > o.max) { while (s.length > 1 && c.measureText(s + '…').width > o.max) s = s.slice(0, -1); s += '…'; }
+  c.fillText(s, x, y); return c.measureText(s).width;
+}
+const pxR = (c, x, y, w, h, f) => { c.fillStyle = f; c.fillRect(x, y, w, h); };
+const pxL = (c, x1, y1, x2, y2, s = PX.LINE, w = 1) => { c.strokeStyle = s; c.lineWidth = w; c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke(); };
+function pxBadge(c, u, cx, cy) { pxFont(c, { b: 1, s: 11 }); const w = Math.max(40, c.measureText(u).width + 14); c.fillStyle = pxCol(u); c.beginPath(); c.roundRect ? c.roundRect(cx - w / 2, cy - 9, w, 18, 5) : c.rect(cx - w / 2, cy - 9, w, 18); c.fill(); pxT(c, u, cx, cy + 0.5, { b: 1, s: 11, c: '#fff', a: 'c' }); }
+function pxTable(cols, W) { // kolom w:0 = sisa lebar
+  const fixed = cols.reduce((a, k) => a + (k.w || 0), 0), flex = cols.filter(k => !k.w).length, out = []; let x = PX.M;
+  for (const k of cols) { const w = k.w || (W - fixed) / flex; out.push({ ...k, x, w }); x += w; } return out;
+}
+function pxCells(c, cols, y, h, vals, o = {}) {
+  cols.forEach((k, i) => { const v = vals[i]; if (v == null || v === '') return;
+    if (k.badge && !o.head) return pxBadge(c, v, k.x + k.w / 2, y + h / 2);
+    const a = o.head ? (k.a === 'r' ? 'r' : k.a === 'c' ? 'c' : 'l') : k.a, tx = a === 'r' ? k.x + k.w - 7 : a === 'c' ? k.x + k.w / 2 : k.x + 7;
+    pxT(c, v, tx, y + h / 2 + 0.5, { s: o.s || 11.5, b: o.head || o.b || k.b, c: o.head ? PX.NAVY : o.c, a, max: k.w - 12 }); });
+}
+function pjBlocks(D, logo) {
+  const P = D.P, B = [], CW = PX.W - 2 * PX.M, allBc = !P.bc, unitName = u => D.units[u]?.name || '';
+  const cols = pxTable([{ t: 'No', w: 34, a: 'c' }, { t: 'Jam', w: 58, a: 'c', b: 1 }, { t: 'Unit', w: 62, a: 'c', badge: 1 }, ...(allBc ? [{ t: 'Basecamp', w: 120 }] : []),
+    { t: 'Proyek Tujuan', w: 0, b: 1 }, { t: 'Spesifikasi / Mutu', w: 200 }, { t: 'Volume', w: 86, a: 'r', b: 1 }, { t: 'Sat.', w: 46, a: 'c' }, { t: 'Keterangan', w: 190 }], CW);
+  const head = (cl, h = 24) => ({ h, keep: 1, draw: (c, y) => { pxR(c, PX.M, y, CW, h, PX.SOFT); pxL(c, PX.M, y, PX.M + CW, y); pxL(c, PX.M, y + h, PX.M + CW, y + h, PX.NAVY); pxCells(c, cl, y, h, cl.map(k => k.t), { head: 1, s: 11 }); } });
+  const dayHead = (d, l, cont) => ({ h: 30, keep: l.length ? 2 : 0, draw: (c, y) => {
+    pxR(c, PX.M, y + 2, CW, 26, '#e3eaf4'); pxR(c, PX.M, y + 2, 4, 26, PX.NAVY);
+    const w = pxT(c, pjDayLong(d) + (cont ? ' (lanjutan)' : ''), PX.M + 14, y + 15.5, { b: 1, s: 13, c: PX.NAVY });
+    pxT(c, l.length ? `${l.length} pengiriman · ${D.T(l).map(a => `${a.unit} ${vol(a.v)} ${a.sat}`).join(' · ')}` : 'Tidak ada jadwal pengiriman', PX.M + CW - 10, y + 15.5, { s: 11.5, c: l.length ? PX.INK : PX.MUTED, a: 'r', max: CW - w - 40, b: l.length ? 1 : 0 }); } });
+  const gap = h => ({ h, gap: 1, draw: () => {} });
+  // kop
+  B.push({ h: 104, draw: (c, y) => {
+    const lh = 66, lw = logo ? lh * logo.width / logo.height : 0; if (logo) c.drawImage(logo, PX.M, y + 4, lw, lh);
+    const x = PX.M + (lw ? lw + 16 : 0);
+    pxT(c, 'PT. ARMADA HADA GRAHA', x, y + 14, { b: 1, s: 13, c: PX.NAVY });
+    pxT(c, 'JADWAL PENGIRIMAN PRODUKSI', x, y + 40, { b: 1, s: 25, c: PX.INK });
+    pxT(c, 'Proyeksi produksi & pengiriman unit basecamp — AMP · CMP · SCP · PCP', x, y + 64, { s: 12, c: PX.MUTED });
+    const rx = PX.M + CW; let yy = y + 12;
+    for (const [k, v, b] of [['Basecamp', P.bc || 'Semua basecamp', 1], ['Periode', P.label, 1], ...(P.range !== P.label ? [['Tanggal', P.range]] : []), ...(P.u ? [['Unit', P.u]] : [])]) {
+      const vw = pxT(c, v, rx, yy, { s: 12, b, a: 'r', max: 330 }); pxT(c, k + ' :', rx - vw - 8, yy, { s: 11.5, c: PX.MUTED, a: 'r' }); yy += 18; }
+    pxL(c, PX.M, y + 90, PX.M + CW, y + 90, PX.NAVY, 2.4); pxL(c, PX.M, y + 94.5, PX.M + CW, y + 94.5, PX.NAVY, 0.8);
+  } });
+  // ringkasan per unit
+  B.push({ h: 72, draw: (c, y) => {
+    if (!D.rows.length) return pxT(c, 'Belum ada jadwal pengiriman pada periode dan filter ini.', PX.M, y + 30, { s: 13, c: PX.MUTED });
+    const boxes = [...D.tot.map(a => ({ a })), { all: 1 }], bw = Math.min(210, (CW - (boxes.length - 1) * 10) / boxes.length); let x = PX.M;
+    for (const b of boxes) {
+      c.fillStyle = '#fff'; c.strokeStyle = PX.LINE; c.lineWidth = 1; c.beginPath(); c.roundRect ? c.roundRect(x, y + 6, bw, 54, 8) : c.rect(x, y + 6, bw, 54); c.fill(); c.stroke();
+      if (b.all) { pxR(c, x, y + 14, 4, 38, PX.NAVY); pxT(c, 'TOTAL PENGIRIMAN', x + 14, y + 22, { b: 1, s: 10.5, c: PX.MUTED }); pxT(c, `${D.rows.length} jadwal`, x + 14, y + 44, { b: 1, s: 18, c: PX.NAVY, max: bw - 20 }); }
+      else { const a = b.a; pxR(c, x, y + 14, 4, 38, pxCol(a.unit)); pxT(c, `${a.unit} · ${unitName(a.unit)}`.toUpperCase(), x + 14, y + 22, { b: 1, s: 10.5, c: pxCol(a.unit), max: bw - 20 });
+        const w = pxT(c, vol(a.v), x + 14, y + 44, { b: 1, s: 19 }); pxT(c, `${a.sat} · ${a.n} kirim`, x + 20 + w, y + 45, { s: 11.5, c: PX.MUTED, max: bw - w - 30 }); }
+      x += bw + 10; }
+  } });
+  // rincian per minggu → per hari
+  const dayList = (days) => { for (const d of days) { const l = D.days.get(d) || []; if (!l.length && !P.empty) continue;
+    const cont = [dayHead(d, l, 1), head(cols)]; B.push(dayHead(d, l)); if (!l.length) { B.push(gap(6)); continue; } B.push(head(cols));
+    l.forEach((x, i) => B.push({ h: 24, cont, draw: (c, y) => { if (i % 2) pxR(c, PX.M, y, CW, 24, '#f8fafc'); pxL(c, PX.M, y + 24, PX.M + CW, y + 24, '#e5e9ef');
+      pxCells(c, cols, y, 24, [i + 1, pjJam(x.jam), x.unit, ...(allBc ? [x.basecamp] : []), x.proyek, x.spec, vol(x.volume), x.sat, x.note || '']); } }));
+    B.push(gap(12)); } };
+  if (P.weeks) for (const w of P.weeks) {
+    const l = D.rows.filter(x => x.date >= w.days[0] && x.date <= w.days.at(-1)); if (!l.length && !P.empty) continue;
+    B.push({ h: 36, keep: 1, draw: (c, y) => { pxR(c, PX.M, y + 4, CW, 28, PX.NAVY);
+      const tw = pxT(c, `MINGGU KE-${w.i}  ·  ${pjRange(w.days[0], w.days.at(-1)).toUpperCase()}`, PX.M + 12, y + 18.5, { b: 1, s: 12.5, c: '#fff' });
+      pxT(c, l.length ? `${l.length} pengiriman · ${D.T(l).map(a => `${a.unit} ${vol(a.v)} ${a.sat}`).join(' · ')}` : 'Tidak ada jadwal', PX.M + CW - 12, y + 18.5, { s: 11.5, c: '#dbe7f5', a: 'r', b: 1, max: CW - tw - 40 }); } });
+    if (!l.length) { B.push(gap(10)); continue; } dayList(w.days); }
+  else dayList([P.s]);
+  // rekap
+  const title = t => ({ h: 38, keep: 2, draw: (c, y) => { pxT(c, t, PX.M, y + 22, { b: 1, s: 14.5, c: PX.NAVY }); pxL(c, PX.M, y + 33, PX.M + 260, y + 33, PX.NAVY, 2); } });
+  const table = (cl, list) => { const cont = [head(cl)]; B.push(head(cl)); list.forEach((v, i) => B.push({ h: 23, cont, draw: (c, y) => {
+    if (v.sub) pxR(c, PX.M, y, CW, 23, '#e9eef5'); else if (i % 2) pxR(c, PX.M, y, CW, 23, '#f8fafc'); pxL(c, PX.M, y + 23, PX.M + CW, y + 23, '#e5e9ef'); pxCells(c, cl, y, 23, v.c, { b: v.sub }); } })); };
+  if (D.rows.length) {
+    if (P.weeks && P.weeks.length > 1) { // rekap per minggu
+      const us = D.tot.map(a => a.unit + '|' + a.sat);
+      const cl = pxTable([{ t: 'Minggu', w: 90, a: 'c', b: 1 }, { t: 'Tanggal', w: 0 }, { t: 'Kirim', w: 70, a: 'c' }, ...D.tot.map(a => ({ t: `${a.unit} (${a.sat})`, w: 130, a: 'r', b: 1 }))], CW);
+      B.push(gap(6), title('Rekap per Minggu'));
+      table(cl, [...P.weeks.map(w => { const l = D.rows.filter(x => x.date >= w.days[0] && x.date <= w.days.at(-1)), m = new Map(D.T(l).map(a => [a.unit + '|' + a.sat, a.v]));
+        return { c: [`Ke-${w.i}`, pjRange(w.days[0], w.days.at(-1)), l.length || '–', ...us.map(k => m.has(k) ? vol(m.get(k)) : '–')] }; }),
+        { sub: 1, c: ['Total', P.label, D.rows.length, ...D.tot.map(a => vol(a.v))] }]);
+      B.push(gap(10));
+    }
+    const cs = pxTable([{ t: 'No', w: 40, a: 'c' }, { t: 'Unit', w: 70, a: 'c', badge: 1 }, { t: 'Spesifikasi / Mutu', w: 0 }, { t: 'Jumlah Kirim', w: 120, a: 'c' }, { t: 'Volume', w: 140, a: 'r', b: 1 }, { t: 'Satuan', w: 90, a: 'c' }], CW);
+    const ls = []; let no = 0; for (const a of D.tot) { for (const s of D.spec.filter(s => s.unit === a.unit && s.sat === a.sat)) ls.push({ c: [++no, s.unit, s.spec, s.n, vol(s.v), s.sat] }); ls.push({ sub: 1, c: ['', '', `Subtotal ${a.unit} — ${unitName(a.unit)}`, a.n, vol(a.v), a.sat] }); }
+    B.push(gap(6), title('Rekap per Unit & Spesifikasi')); table(cs, ls); B.push(gap(10));
+    if (P.scope !== 'day' || D.proj.length > 1) {
+      const cp = pxTable([{ t: 'No', w: 40, a: 'c' }, { t: 'Proyek Tujuan', w: 0, b: 1 }, { t: 'Unit', w: 70, a: 'c', badge: 1 }, { t: 'Spesifikasi / Mutu', w: 230 }, { t: 'Jumlah Kirim', w: 110, a: 'c' }, { t: 'Volume', w: 130, a: 'r', b: 1 }, { t: 'Satuan', w: 80, a: 'c' }], CW);
+      B.push(gap(6), title('Rekap per Proyek')); table(cp, D.proj.map((p, i) => ({ c: [i + 1, p.proyek, p.unit, p.spec, p.n, vol(p.v), p.sat] }))); B.push(gap(10));
+    }
+  }
+  // tanda tangan
+  B.push({ h: 150, draw: (c, y) => {
+    pxT(c, 'Catatan: jadwal ini merupakan proyeksi, jam & volume dapat menyesuaikan konfirmasi proyek dan kondisi lapangan.', PX.M, y + 16, { s: 11, c: PX.MUTED, max: CW });
+    const w = CW / 3, at = D.at;
+    [['Dibuat oleh,', D.maker, 'Admin / PPIC Unit'], ['Diperiksa oleh,', '', 'PPIC Manager'], ['Disetujui oleh,', '', 'Manager Unit']].forEach(([a, n, r], i) => {
+      const cx = PX.M + w * i + w / 2;
+      if (i === 0) pxT(c, `${P.bc ? bcCity(P.bc) + ', ' : ''}${at.getDate()} ${MONTHS[at.getMonth()]} ${at.getFullYear()}`, cx, y + 40, { s: 11.5, a: 'c', c: PX.MUTED });
+      pxT(c, a, cx, y + 58, { s: 12, a: 'c' });
+      pxL(c, cx - 95, y + 122, cx + 95, y + 122, PX.INK, 0.8);
+      pxT(c, n ? n : '', cx, y + 112, { s: 12, b: 1, a: 'c', max: 190 });
+      pxT(c, r, cx, y + 136, { s: 11, a: 'c', c: PX.MUTED }); });
+  } });
+  return B;
+}
+const bcCity = bc => String(bc).split(/[-–/]/)[0].trim();
+function pxFooter(c, D, y, i, n) {
+  pxL(c, PX.M, y - 12, PX.W - PX.M, y - 12, PX.LINE);
+  const at = D.at, ts = `${pad(at.getDate())}/${pad(at.getMonth() + 1)}/${at.getFullYear()} ${pad(at.getHours())}.${pad(at.getMinutes())}`;
+  pxT(c, `Virtual Work AHG · Proyeksi Produksi · dicetak ${ts} oleh ${D.maker}`, PX.M, y, { s: 10, c: PX.MUTED, max: PX.W - 2 * PX.M - 140 });
+  if (n) pxT(c, `Halaman ${i} dari ${n}`, PX.W - PX.M, y, { s: 10, c: PX.MUTED, a: 'r' });
+}
+function pxStrip(c, W) { const u = PJ_ORD, w = W / u.length; u.forEach((k, i) => pxR(c, i * w, 0, w + 1, 7, pxCol(k))); }
+function pxCanvas(w, h, k) { const cv = document.createElement('canvas'); cv.width = Math.round(w * k); cv.height = Math.round(h * k); const c = cv.getContext('2d'); c.scale(k, k); pxR(c, 0, 0, w, h, '#fff'); return [cv, c]; }
+function pjPages(B, D) { // PDF: blok → halaman; baris tabel yang terpotong mengulang judul hari + kepala tabel
+  const top2 = PX.M + 40, bot = PX.H - PX.M - 18, pages = [[]]; let y = PX.M;
+  for (let i = 0; i < B.length; i++) {
+    const b = B[i]; let need = b.h, j = i, rem = b.keep || 0; while (rem > 0 && j + 1 < B.length) { j++; need += B[j].h; rem = Math.max(rem - 1, B[j].keep || 0); }
+    if (y + need > bot && pages.at(-1).length) { pages.push([]); y = top2; if (b.gap) continue; for (const x of b.cont || []) { pages.at(-1).push({ b: x, y }); y += x.h; } }
+    pages.at(-1).push({ b, y }); y += b.h;
+  }
+  return pages.filter(p => p.some(x => !x.b.gap));
+}
+async function pjImage() { // logo kop (dari CSS .ahg-logo)
+  try { const img = new Image(); await new Promise((ok, no) => { img.onload = ok; img.onerror = no; img.src = LOGO_URI(); }); return img; } catch { return null; }
+}
+const pxJpg = (cv, q = 0.9) => new Promise(ok => cv.toBlob(b => ok(b), 'image/jpeg', q));
+async function pjExport(fmt) {
+  const P = pjPeriod(), btn = $(`[data-a="pjExp"][data-f="${fmt}"]`), lbl = btn?.textContent;
+  if (P.scope === 'day' && !P.s) return toast('Pilih tanggal.', 'warn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Menyusun…'; }
+  try {
+    const D = pjCollect(P); if (!D.rows.length && !P.empty) throw new Error('belum ada jadwal pengiriman pada periode / filter ini — centang "Tampilkan juga hari tanpa jadwal" untuk mencetak jadwal kosong');
+    const logo = await pjImage(), B = pjBlocks(D, logo), name = `Jadwal-Pengiriman-${slug(P.bc || 'Semua-Basecamp')}-${P.key}${P.u ? '-' + P.u : ''}`;
+    if (fmt === 'jpg') {
+      const H = PX.M + 6 + B.reduce((a, b) => a + b.h, 0) + 40, k = Math.min(2, Math.sqrt(16e6 / (PX.W * H)), 16000 / H);
+      const [cv, c] = pxCanvas(PX.W, H, k); pxStrip(c, PX.W); let y = PX.M; for (const b of B) { b.draw(c, y); y += b.h; } pxFooter(c, D, H - 16, 0, 0);
+      const blob = await pxJpg(cv, 0.92), url = URL.createObjectURL(blob); saveAs(url, name + '.jpg'); setTimeout(() => URL.revokeObjectURL(url), 8000);
+      closeAll(); toast(`🖼 Gambar jadwal ${esc(P.label)} diunduh.`, 'info', null, 3500);
+    } else {
+      const pages = pjPages(B, D), d = PDF.doc({ landscape: true });
+      for (const [i, pg] of pages.entries()) {
+        const [cv, c] = pxCanvas(PX.W, PX.H, 2); pxStrip(c, PX.W);
+        if (i) { pxT(c, `JADWAL PENGIRIMAN PRODUKSI — ${P.bc || 'Semua basecamp'} · ${P.label}`, PX.M, PX.M + 12, { b: 1, s: 12, c: PX.NAVY, max: PX.W - 2 * PX.M }); pxL(c, PX.M, PX.M + 26, PX.W - PX.M, PX.M + 26, PX.NAVY, 1.4); }
+        for (const { b, y } of pg) b.draw(c, y);
+        pxFooter(c, D, PX.H - 20, i + 1, pages.length);
+        const u8 = new Uint8Array(await (await pxJpg(cv, 0.9)).arrayBuffer()); let bin = ''; for (let o = 0; o < u8.length; o += 32768) bin += String.fromCharCode.apply(null, u8.subarray(o, o + 32768));
+        if (i) d.add(); d.image(0, 0, d.W, d.H, { w: cv.width, h: cv.height, jpg: bin });
+      }
+      saveBytes(d.build(), name + '.pdf', 'application/pdf');
+      closeAll(); toast(`📕 PDF jadwal ${esc(P.label)} diunduh (${pages.length} halaman).`, 'info', null, 3500);
+    }
+  } catch (e) { console.error(e); toast('Gagal mencetak: ' + esc(e.message), 'warn', null, 6000); if (btn) { btn.disabled = false; btn.textContent = lbl; } }
+}
+
+const PJA = {
+  pjNew: el => pjDialog(null, el.dataset.d),
+  pjEdit: el => { const t = S.items.get(el.dataset.id); if (t) pjDialog(t); },
+  pjDel: async el => { const t = S.items.get(el.dataset.id); if (!t) return; const x = t.data;
+    if (await confirmDlg(`Hapus jadwal kirim ${esc(x.unit)} · ${esc(x.proyek || '')} · ${vol(x.volume)} ${esc(x.sat || '')} (${esc(pjDayLong(x.date))} ${esc(pjJam(x.jam))})?`, 'Hapus')) { closeAll(); remove(t.id); } },
+  pjRowAdd: () => { const box = $('#pf-rows'), rs = $$('.pjf', box), last = rs.at(-1);
+    const x = last ? { unit: $('.pf-unit', last).value, jam: $('.pf-jam', last).value } : {}; if (x.unit === '') delete x.unit;
+    box.insertAdjacentHTML('beforeend', pjFormRow(x, rs.length + 1)); const n = $$('.pjf', box).at(-1); n.scrollIntoView({ block: 'nearest' }); $(x.unit ? '.pf-proj' : '.pf-unit', n)?.focus(); },
+  pjRowDel: el => { const r = el.closest('.pjf'), box = $('#pf-rows'); if ($$('.pjf', box).length < 2) return; r.remove(); $$('.pjf-n', box).forEach((s, i) => s.textContent = i + 1); },
+  pjNav: el => { pjInit(); const [y, m] = PJ.m.split('-').map(Number), d = new Date(y, m - 1 + Number(el.dataset.n), 1); PJ.m = ymd(d).slice(0, 7); PJ.w = 0; renderMain(); },
+  pjPick: el => { PJ.u = PJ.u === el.dataset.u ? '' : el.dataset.u; renderMain(); },
+  pjCopy: el => pjCopy(el.dataset.d),
+  pjExpDlg: () => pjExpDialog(),
+  pjExp: el => pjExport(el.dataset.f),
+};
+const PJCH = {
+  pjBc: el => { PJ.bc = el.value; LS.set('pj.bc', el.value); renderMain(); },
+  pjM: el => { if (!el.value) return; PJ.m = el.value; PJ.w = 0; renderMain(); },
+  pjW: el => { PJ.w = Number(el.value) || 0; renderMain(); },
+  pjU: el => { PJ.u = el.value; renderMain(); },
+  pjEmpty: el => { PJ.empty = el.checked ? 1 : 0; LS.set('pj.empty', PJ.empty ? '1' : '0'); renderMain(); },
+  pjFBc: el => { const on = el.value === '+'; $('#pf-bc-new-l').hidden = !on; if (on) $('#pf-bc-new').focus(); },
+  pjFUnit: el => { const r = el.closest('.pjf'), v = el.value; $('.pf-spec', r).innerHTML = pjSpecOpts(v, ''); $('.pf-spec-new', r).hidden = true; $('.pf-sat', r).textContent = prodUnits()[v]?.sat || ''; },
+  pjFProj: el => { const i = $('.pf-proj-new', el.closest('.pjf')); i.hidden = el.value !== '+'; if (!i.hidden) i.focus(); },
+  pjFSpec: el => { const i = $('.pf-spec-new', el.closest('.pjf')); i.hidden = el.value !== '+'; if (!i.hidden) i.focus(); },
+  pxSc: el => { pxRead(); PJ.exp.scope = el.value; $('#px-ref').innerHTML = pxRefHtml(); },
+  pxM: el => { if (!el.value) return; PJ.exp.m = el.value; PJ.exp.w = 1; $('#px-ref').innerHTML = pxRefHtml(); },
+};
+
 // Virtual Work AHG — reminder, global chat (+ whisper), task (+ rutin mingguan) dan kasbon tim. Data di Supabase (proyek ahg-produksi), sinkron real time.
-const BUILD = '20261110-080250';
+const BUILD = '20261122-192912';
 const SB_URL = 'https://herltzublcqpbgyxbbyp.supabase.co', SB_KEY = 'sb_publishable_FMSC0iqDRLsRXtvTtZX0Ow_piPi5bli'; // public key; tables closed, only ahg_* functions
 // File → Google Drive yulius.krisnawan (folder "AHG Produksi", 5 GiB) lewat Edge Function ahg-file: cek login, buka sesi upload Drive
 // (browser kirim byte langsung ke Google), unduh diproksikan per 8 MiB. Cadangan saat Drive terputus: Supabase Storage (bucket ahg-files).
@@ -2685,7 +3100,7 @@ const NOTE_COLORS = { '': ['Tanpa warna', 'transparent'], red: ['Merah', '#f28b8
 const ACCENTS = { '#1f6fc0': 'Biru AHG (logo)', '#d62b2b': 'Merah AHG (logo)', '#1a8566': 'Hijau', '#2563eb': 'Biru', '#7c3aed': 'Ungu', '#db2777': 'Pink', '#e07b00': 'Oranye', '#dc2626': 'Merah', '#0d9488': 'Toska', '#475569': 'Abu' };
 const AV_COLORS = ['#1a8566', '#2563eb', '#7c3aed', '#db2777', '#e07b00', '#dc2626', '#0d9488', '#475569', '#9333ea', '#0891b2'];
 const STATUS = { todo: ['Belum', '○'], doing: ['Proses', '◐'], done: ['Selesai', '●'] };
-const VIEWS = { home: ['📊', 'Dashboard'], reminder: ['⏰', 'Reminder'], chat: ['💬', 'Global Chat'], task: ['✅', 'Task'], cash: ['💰', 'Cash'], unit: ['🏭', 'Unit'], wait: ['🎮', 'Waiting'], tools: ['🧰', 'Tools'], users: ['👥', 'Users'], admin: ['👑', 'Admin'] };
+const VIEWS = { home: ['📊', 'Dashboard'], reminder: ['⏰', 'Reminder'], chat: ['💬', 'Global Chat'], task: ['✅', 'Task'], cash: ['💰', 'Cash'], unit: ['🏭', 'Unit'], proyeksi: ['📅', 'Proyeksi Produksi'], wait: ['🎮', 'Waiting'], tools: ['🧰', 'Tools'], users: ['👥', 'Users'], admin: ['👑', 'Admin'] };
 
 // ---------- state ----------
 const now0 = new Date();
@@ -2976,7 +3391,7 @@ function notifyNew(it) {
 }
 function notifyMention(it) {
   const d = it.data, who = uname(it.owner), r = it.kind === 'comment' ? S.items.get(d.rem || d.task) : null;
-  const where = { reminder: 'reminder', task: 'task', cash: 'kasbon', unit: d.cat === 'stok' ? 'stok material' : 'input produksi' }[it.kind] || (r?.kind === 'reminder' ? 'komentar reminder' : 'komentar task');
+  const where = { reminder: 'reminder', task: 'task', cash: 'kasbon', unit: d.cat === 'stok' ? 'stok material' : d.cat === 'proyeksi' ? 'jadwal proyeksi produksi' : 'input produksi' }[it.kind] || (r?.kind === 'reminder' ? 'komentar reminder' : 'komentar task');
   const title = it.kind === 'comment' ? (r?.data.title || '') : it.kind === 'reminder' || it.kind === 'task' ? (d.title || '') : (d.item || d.note || '');
   const go2 = () => { const tgt = it.kind === 'comment' ? r : it; if (!tgt) return; if (tgt.kind === 'reminder') { if (it.kind === 'comment') S.rem.open[tgt.id] = 1; S.rem.sel = ''; S.rem.who = '@me'; go('reminder'); } else if (tgt.kind === 'task') openTask(tgt.id); else go(tgt.kind === 'cash' ? 'cash' : 'unit'); };
   toast(`📣 <b>${esc(who)}</b> menandai kamu di ${where}${title ? ': “' + esc(title.slice(0, 100)) + '”' : ''}`, 'msg', go2, 10000); beep();
@@ -3112,11 +3527,11 @@ function badges() {
 }
 function renderNav() {
   const b = badges(), on = S.users.filter(online).length;
-  const items = ['home', 'reminder', 'task', 'cash', 'unit', 'wait', 'users', ...(isAdmin() ? ['admin'] : [])];
+  const items = ['home', 'reminder', 'task', 'cash', 'unit', 'proyeksi', 'wait', 'users', ...(isAdmin() ? ['admin'] : [])];
   const n = { reminder: b.rem, chat: b.chat, task: b.task, wait: waitBadge(), users: on };
   setHTML($('#side'), items.map(v => (v === 'wait' ? CMP_NAV : '') + `<button type="button" class="nav ${S.view === v ? 'on' : ''} nv-${v}" data-a="go" data-v="${v}"><span class="ic">${VIEWS[v][0]}</span><span class="lb">${VIEWS[v][1]}</span>${n[v] ? `<span class="n ${v === 'chat' ? 'hot' : v === 'users' ? 'grn' : ''}">${n[v]}</span>` : ''}</button>`).join('')
     + `<div class="side-f"><span class="sync"></span><span class="muted small">versi ${BUILD}</span></div>`);
-  setHTML($('#bnav'), ['home', 'reminder', 'task', 'cash', 'unit', 'wait', 'users'].map(v => `<button type="button" class="${S.view === v ? 'on' : ''}" data-a="go" data-v="${v}"><span class="ic">${VIEWS[v][0]}${n[v] && v !== 'users' ? `<i class="dot ${v === 'chat' ? 'hot' : ''}">${n[v] > 99 ? '99+' : n[v]}</i>` : ''}</span><span>${v === 'chat' ? 'Chat' : v === 'home' ? 'Home' : VIEWS[v][1]}</span></button>`).join(''));
+  setHTML($('#bnav'), ['home', 'reminder', 'task', 'cash', 'unit', 'wait', 'users'].map(v => `<button type="button" class="${S.view === v || (v === 'unit' && S.view === 'proyeksi') ? 'on' : ''}" data-a="go" data-v="${v}"><span class="ic">${VIEWS[v][0]}${n[v] && v !== 'users' ? `<i class="dot ${v === 'chat' ? 'hot' : ''}">${n[v] > 99 ? '99+' : n[v]}</i>` : ''}</span><span>${v === 'chat' ? 'Chat' : v === 'home' ? 'Home' : VIEWS[v][1]}</span></button>`).join(''));
   setHTML($('#me-btn'), `${av(S.me.name)}<span class="mn">${esc(uname(S.me.name))}${isAdmin() ? ' <small>Admin</small>' : ''}</span><span class="caret">▾</span>`);
   renderBell();
   $('#tools-btn')?.classList.toggle('on', S.view === 'tools');
@@ -3145,7 +3560,7 @@ function keep(root, fn) {
 }
 function renderMain() {
   const m = $('#main'); if (!m) return;
-  const html = ({ home: vHome, reminder: vReminder, chat: vChat, task: vTask, cash: vCash, unit: vUnit, wait: vWait, tools: vTools, users: vUsersPage, admin: vAdmin }[S.view] || vReminder)();
+  const html = ({ home: vHome, reminder: vReminder, chat: vChat, task: vTask, cash: vCash, unit: vUnit, proyeksi: vProyeksi, wait: vWait, tools: vTools, users: vUsersPage, admin: vAdmin }[S.view] || vReminder)();
   const sameChat = S.view === 'chat' && m.dataset.view === 'chat' && m.dataset.conv === S.chat.conv && $('#composer', m);
   if (sameChat) { // keep the composer (typing, IME, file picker) — refresh only lists and header
     const tmp = document.createElement('div'); tmp.innerHTML = html;
@@ -3854,9 +4269,9 @@ function vUnit() {
   const U = S.unit, pu = prodUnits(), l = unitList();
   const tot = {}; for (const t of l) { const k = t.data.unit + '|' + (t.data.sat || ''); (tot[k] ||= { unit: t.data.unit, sat: t.data.sat, v: 0, n: 0, bc: new Set() }); tot[k].v += Number(t.data.volume) || 0; tot[k].n++; tot[k].bc.add(t.data.basecamp); }
   const groups = {}; for (const t of l) (groups[t.data.date] ||= []).push(t);
-  return `<div class="head"><h1>🏭 Unit <span class="hc">aktivitas unit basecamp</span></h1><div class="tools"><button type="button" class="btn primary" data-a="unitNew">＋ Input produksi</button><button type="button" class="btn" data-a="unitExpDlg" title="Unduh laporan PDF / Excel">📤 Export</button></div></div>
+  return `<div class="head"><h1>🏭 Unit <span class="hc">aktivitas unit basecamp</span></h1><div class="tools"><button type="button" class="btn primary" data-a="unitNew">＋ Input produksi</button><button type="button" class="btn" data-a="go" data-v="proyeksi" title="Jadwal pengiriman per basecamp">📅 Proyeksi</button><button type="button" class="btn" data-a="unitExpDlg" title="Unduh laporan PDF / Excel">📤 Export</button></div></div>
   <section class="card cflt">
-    <select id="u-cat" data-ch="unitCat" data-keep="0">${Object.entries(UNIT_CATS).map(([k, l]) => `<option value="${k}" ${U.cat === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
+    <select id="u-cat" data-ch="unitCat" data-keep="0">${Object.entries(UNIT_CATS).map(([k, l]) => `<option value="${k}" ${U.cat === k ? 'selected' : ''}>${l}</option>`).join('')}<option value="proyeksi">📅 Proyeksi Produksi</option></select>
     <select id="u-p" data-ch="unitP" data-keep="0">${Object.entries(PERIODS).map(([k, l]) => `<option value="${k}" ${U.p === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
     ${['week', 'month', 'year'].includes(U.p) ? `<span class="pnav"><button type="button" class="ib" data-a="unitNav" data-n="-1">‹</button><b>${esc(periodLabel(U.p, U.ref))}</b><button type="button" class="ib" data-a="unitNav" data-n="1">›</button></span>` : ''}
     ${U.p === 'range' ? `<input type="date" id="u-from" data-ch="unitFrom" data-keep="0" value="${U.from}"><span>–</span><input type="date" id="u-to" data-ch="unitTo" data-keep="0" value="${U.to}">` : ''}
@@ -3925,7 +4340,7 @@ function vStok() {
   const groups = {}; for (const t of l) (groups[t.data.date] ||= []).push(t);
   return `<div class="head"><h1>🏭 Unit <span class="hc">stock material basecamp</span></h1><div class="tools"><button type="button" class="btn primary" data-a="stokNew">＋ Input stok</button><button type="button" class="btn" data-a="unitExpDlg" title="Unduh laporan PDF / Excel">📤 Export</button></div></div>
   <section class="card cflt">
-    <select id="u-cat" data-ch="unitCat" data-keep="0">${Object.entries(UNIT_CATS).map(([k, l]) => `<option value="${k}" ${U.cat === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
+    <select id="u-cat" data-ch="unitCat" data-keep="0">${Object.entries(UNIT_CATS).map(([k, l]) => `<option value="${k}" ${U.cat === k ? 'selected' : ''}>${l}</option>`).join('')}<option value="proyeksi">📅 Proyeksi Produksi</option></select>
     <select id="u-p" data-ch="unitP" data-keep="0">${Object.entries(PERIODS).map(([k, l]) => `<option value="${k}" ${U.p === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
     ${['week', 'month', 'year'].includes(U.p) ? `<span class="pnav"><button type="button" class="ib" data-a="unitNav" data-n="-1">‹</button><b>${esc(periodLabel(U.p, U.ref))}</b><button type="button" class="ib" data-a="unitNav" data-n="1">›</button></span>` : ''}
     ${U.p === 'range' ? `<input type="date" id="u-from" data-ch="unitFrom" data-keep="0" value="${U.from}"><span>–</span><input type="date" id="u-to" data-ch="unitTo" data-keep="0" value="${U.to}">` : ''}
@@ -4258,7 +4673,7 @@ async function viewFile(id, name, mime) {
 
 // ---------- actions ----------
 const A = {
-  ...GA, ...GA2, ...NA, ...FA, ...HA, ...LA,
+  ...GA, ...GA2, ...NA, ...FA, ...HA, ...LA, ...PJA,
   pwShow() { const p = $('#l-pass'); p.type = p.type === 'password' ? 'text' : 'password'; },
   lMode(el) { const keep = { user: $('#l-user')?.value || '', pass: $('#l-pass')?.value || '' }; S.lmode = el.dataset.m; renderLogin(keep); },
   go: el => { if (dlg().open) closeAll(); go(el.dataset.v); },
@@ -4368,7 +4783,7 @@ const A = {
   admDel: async el => { const n = el.dataset.u; const r = await confirmDlg(`Hapus user <b>${esc(n)}</b>? Akun & sesi dihapus (nama bisa dipakai daftar lagi).`, 'Hapus user', true, `<label class="chk-l"><input type="checkbox" id="cf-purge"> Hapus juga semua data buatannya (reminder, task, cash, pesan)</label>`); if (r) adminAct('delete', n, $('#cf-purge')?.checked); }
 };
 const CH = { // change / input handlers
-  ...LCH,
+  ...LCH, ...PJCH,
   remM: el => { S.rem.m = Number(el.value); S.rem.sel = ''; renderMain(); },
   remY: el => { S.rem.y = Number(el.value); S.rem.sel = ''; renderMain(); },
   remScope: el => { S.rem.scope = el.value; renderMain(); },
@@ -4399,7 +4814,7 @@ const CH = { // change / input handlers
   cashQ: (el, ev) => { if (ev.type === 'input') { S.cash.q = el.value; renderMain(); } },
   amt: (el, ev) => { if (ev.type !== 'input') return; const n = parseNum(el.value); el.value = n ? num(n) : ''; },
   cfFile: async el => { const f = el.files[0]; if (!f) return; try { S.dlg.newFile = await prepFile(f); $('#cf-fname').textContent = '📎 ' + S.dlg.newFile.name + ' (' + fsize(S.dlg.newFile.size) + ')'; } catch (e) { toast(esc(e.message), 'warn'); el.value = ''; } },
-  unitCat: el => { S.unit.cat = el.value; renderMain(); }, unitP: el => { S.unit.p = el.value; S.unit.ref = today(); renderMain(); },
+  unitCat: el => { if (el.value === 'proyeksi') return go('proyeksi'); S.unit.cat = el.value; renderMain(); }, unitP: el => { S.unit.p = el.value; S.unit.ref = today(); renderMain(); },
   unitFrom: el => { S.unit.from = el.value; renderMain(); }, unitTo: el => { S.unit.to = el.value; renderMain(); },
   unitBc: el => { S.unit.bc = el.value; renderMain(); }, unitU: el => { S.unit.u = el.value; renderMain(); },
   unitQ: (el, ev) => { if (ev.type === 'input') { S.unit.q = el.value; renderMain(); } },
@@ -4514,6 +4929,7 @@ document.addEventListener('submit', async ev => {
     closeAll(); toast(`${type === 'in' ? 'Uang masuk' : 'Uang keluar'} ${money(amount)} · ${esc(catName(cat))} — sisa ${money(catTotals(cat).close)}`, 'info', null, 4000);
   } else if (f.id === 'unit-form') { saveUnitForm(f);
   } else if (f.id === 'stok-form') { saveStokForm(f);
+  } else if (f.id === 'pj-form') { pjSave(f);
   } else if (f.id === 'cat-form') {
     const name = $('#kc-name').value.trim(); if (!name) return;
     const data = { name, color: $('input[name=kc-color]:checked', f)?.value || 'green', note: $('#kc-note').value.trim(), archived: !!$('#kc-arch')?.checked };
@@ -4581,7 +4997,7 @@ boot();
 // EXPORT (PDF / Excel / Cetak / Laporan Operasional) TIDAK ikut Proper: datanya dinormalkan ke aturan penulisan laporan —
 // judul/nama/label = kapital tiap kata kecuali kata tugas (di, ke, dari, dan, yang, untuk…), catatan/keterangan/komentar = kalimat biasa.
 const PR = {
-  AC: new Set(('AHG AMP CMP PCP SCP TM WIB WITA WIT PDF WA HP PT CV UD BH DT SO PO DO SJ SPK SPB BBM ID OK ATK APD K3 P3K PPN PPH NPWP NIK ' +
+  AC: new Set(('AHG AMP CMP PCP SCP TM JPG WIB WITA WIT PDF WA HP PT CV UD BH DT SO PO DO SJ SPK SPB BBM ID OK ATK APD K3 P3K PPN PPH NPWP NIK ' +
     'KTP SIM STNK BPKB URL QR RT RW CCTV GPS PLN PDAM AC TV USB HRD GM QC QA SOP BOM SDM PU DPU PUPR SNI ISO PIC HSE MEP SPBU KB MB GB TB ' +
     'UMKM BUMN CSR KPI SKU NB PS JL').split(' ')),
   UNIT: new Set(['cm', 'mm', 'km', 'kg', 'mg', 'ml', 'm2', 'm3', 'm²', 'm³', 'cm2', 'cm3', 'mm2']),
@@ -4670,7 +5086,7 @@ prCodes(); prNode(document.body);
 prObs.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['placeholder', 'title'] });
 
 // ---- export: data dinormalkan ke aturan penulisan laporan selama file disusun ----
-const PR_TITLE = { reminder: ['title'], task: ['title'], cashcat: ['name'], link: ['title'], unit: ['basecamp', 'item', 'mcat', 'size'] };
+const PR_TITLE = { reminder: ['title'], task: ['title'], cashcat: ['name'], link: ['title'], unit: ['basecamp', 'item', 'mcat', 'size'] }; // proyek (proyeksi) tetap seperti diketik: "Proyek A" jangan jadi "Proyek a"
 const PR_SENT = ['note', 'text', 'body'];
 const prDays = 'senin selasa rabu kamis jumat jum\'at sabtu minggu januari februari maret april mei juni juli agustus september oktober november desember jan feb mar apr jun jul agu ags agt sep okt nov des indonesia';
 function prNames(items, users) {
@@ -4701,7 +5117,7 @@ function prNormal(fn) {
 }
 reportPdf = prNormal(reportPdf); reportXlsx = prNormal(reportXlsx); reportPrint = prNormal(reportPrint);
 unitExport = prNormal(unitExport); remExport = prNormal(remExport);
-lpCollect = prNormal(lpCollect); lpUnits = prNormal(lpUnits); lpRender = prNormal(lpRender);
+pjCollect = prNormal(pjCollect); lpCollect = prNormal(lpCollect); lpUnits = prNormal(lpUnits); lpRender = prNormal(lpRender);
 </script>
 </body>
 </html>
