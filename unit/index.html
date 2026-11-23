@@ -6,10 +6,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <script>/* phones: whole app at 81% (layout widens to fill the screen); max-scale stops iOS zooming into inputs */
 if (Math.min(screen.width, screen.height) <= 820) document.querySelector('meta[name=viewport]').content = 'width=device-width, initial-scale=0.81, minimum-scale=0.81, maximum-scale=0.81, viewport-fit=cover';
-try { const t = JSON.parse(localStorage.getItem('ahg.theme') || '{}'); if (t.mode && t.mode !== 'auto') document.documentElement.dataset.theme = t.mode; if (t.accent) document.documentElement.style.setProperty('--acc', t.accent); } catch {}</script>
+try { const t = JSON.parse(localStorage.getItem('ahg.theme') || '{}'), m = t.mode || 'light'; if (m !== 'auto') document.documentElement.dataset.theme = m; if (t.accent) document.documentElement.style.setProperty('--acc', t.accent); } catch {}</script>
 <title>Virtual Work AHG</title>
 <meta name="description" content="Virtual Work AHG — reminder, global chat, task dan kasbon tim, sinkron real time di HP dan laptop.">
-<meta name="theme-color" content="#1f6fc0">
+<meta name="theme-color" content="#14365f">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='24' fill='%231f6fc0'/><text x='50' y='63' font-family='Arial' font-weight='700' font-size='34' fill='white' text-anchor='middle'>AHG</text></svg>">
 <style>:root{--acc:#1f6fc0;--ahg-blue:#1f6fc0;--ahg-red:#d62b2b;--bg:#f4f6f5;--card:#fff;--soft:#eef1ef;--line:#dfe4e1;--text:#16191a;--muted:#5f6b67;--red:#d93d42;--green:#15803d;--warn:#b45309;--na:60%;--shadow:0 1px 2px rgba(10,30,20,.05),0 4px 14px rgba(10,30,20,.05);--acc-ink:#fff;color-scheme:light}
 @media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#0f1312;--card:#181d1c;--soft:#212826;--line:#2c3532;--text:#eef3f1;--muted:#9fb0aa;--red:#ff6b70;--green:#4ade80;--warn:#fbbf24;--na:26%;--shadow:none;color-scheme:dark}}
@@ -1029,10 +1032,219 @@ a.nav{text-decoration:none}
 .pjf input[hidden]{display:none}
 .pj-add{margin-top:10px;align-self:flex-start}
 @media (max-width:700px){ .pjr .pj-jam{width:40px;font-size:12.5px} .pjd-h{padding-left:12px} }
+
+/* ==== TAMPILAN BASECAMP BAWEN (2026-11-23) — ahgproduksi disamakan dengan ahgbawen.github.io ====
+   Lapisan terakhir: token warna, font Inter, sidebar navy, header berjejak, tombol/kartu/tabel formal, halaman masuk terbelah.
+   Fitur & struktur halaman lama tidak diubah; hanya tampilan. */
+:root{--navy:#14365f;--navy2:#0e2744;--blue:#1f5fae;--blue2:#2f76c9;--line2:#cfd7e2;--ink2:#3c4859;--surface2:#f7f9fb;
+  --sh1:0 1px 2px rgba(16,34,61,.06),0 1px 1px rgba(16,34,61,.04);--sh2:0 10px 30px -12px rgba(16,34,61,.25),0 2px 6px rgba(16,34,61,.06);
+  --ease:cubic-bezier(.22,.8,.24,1);--t:.26s;--sidew:264px;--toph:60px;
+  --bg:#f2f4f7;--card:#fff;--soft:#f4f6f9;--line:#e1e6ed;--text:#18212f;--muted:#6a7686;--red:#c62828;--green:#1f7a4d;--warn:#a86400;
+  --shadow:var(--sh1);--g-orbs:none;--g-blur:none;--g-edge:var(--line);--g-hi:transparent;--g-solid:#fff;color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#0c1524;--card:#132036;--soft:#1a2a45;--line:#24385a;--line2:#33496d;--text:#e6edf7;--ink2:#c3cfe0;--muted:#91a3bd;--surface2:#17263f;--g-solid:#132036;--shadow:none;color-scheme:dark}}
+:root[data-theme=dark]{--bg:#0c1524;--card:#132036;--soft:#1a2a45;--line:#24385a;--line2:#33496d;--text:#e6edf7;--ink2:#c3cfe0;--muted:#91a3bd;--surface2:#17263f;--g-solid:#132036;--shadow:none;color-scheme:dark}
+html,body{background:var(--bg);font:14px/1.5 Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-feature-settings:"tnum" 1,"cv11" 1;-webkit-font-smoothing:antialiased}
+body::before{display:none}
+h1,h2,h3,h4{letter-spacing:-.01em}
+.top,.side,.upanel,.bnav,.card,.rrow,.convs,.cpane,.quick,.ncard,.kcard,.ucard,.txd,.btn,.chip,.me-btn,.bell-btn,.find-bar,.chat-fab.on,.find-fab.on,.seg,dialog,.mpop{backdrop-filter:none;-webkit-backdrop-filter:none}
+/* ikon garis (pengganti emoji) */
+.ico{width:18px;height:18px;flex:none;display:inline-block;vertical-align:middle}
+.ei{display:inline-flex;align-items:center;vertical-align:-.18em;line-height:1}
+.ei .ico{width:1.15em;height:1.15em;stroke-width:1.8}
+/* ---------- kontrol ---------- */
+input,select,textarea{background:var(--card);border:1px solid var(--line2);border-radius:9px;transition:border-color var(--t),box-shadow var(--t)}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 4px rgba(31,95,174,.12)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:36px;padding:7px 14px;border-radius:9px;border:1px solid var(--line2);background:var(--card);color:var(--ink2);font-weight:600;font-size:13.5px;box-shadow:none;transition:background var(--t) var(--ease),border-color var(--t),color var(--t),transform .12s}
+.btn:hover{background:var(--card);border-color:var(--blue2);color:var(--navy)}
+.btn:active{transform:translateY(1px)}
+.btn.primary,.btn.pri{background:var(--blue);border-color:var(--blue);color:#fff;box-shadow:0 1px 0 rgba(255,255,255,.15) inset,0 4px 12px -6px rgba(31,95,174,.7)}
+.btn.primary:hover,.btn.pri:hover{background:var(--navy);border-color:var(--navy);color:#fff;filter:none}
+.btn.danger{color:var(--red)}.btn.danger:hover{border-color:var(--red);background:#fdecec;color:var(--red)}
+.btn.danger-f{background:var(--red);border-color:var(--red);color:#fff}
+.btn.sm{min-height:30px;padding:4px 11px;font-size:12.5px;border-radius:8px}
+.btn.big,.btn.block{width:100%;min-height:44px;font-size:14.5px}
+.btn .ei .ico{width:16px;height:16px}
+.ibtn{width:36px;height:36px;display:inline-grid;place-items:center;border-radius:9px;border:1px solid transparent;background:transparent;color:var(--ink2);cursor:pointer;padding:0;transition:background var(--t),color var(--t),border-color var(--t)}
+.ibtn:hover{background:var(--surface2);border-color:var(--line);color:var(--navy)}
+.ibtn.sm{width:28px;height:28px;border-radius:7px}.ibtn.sm .ico{width:15px;height:15px}
+.chip{border-color:var(--line2);background:var(--card);color:var(--ink2);border-radius:8px;padding:5px 11px;font-size:12.5px}
+.chip.on{background:#e9f1fb;border-color:var(--blue);color:var(--navy)}
+.seg{border:1px solid var(--line);background:var(--surface2);border-radius:10px}
+.seg button.on{background:var(--card);color:var(--navy);box-shadow:var(--sh1)}
+.card,.rrow,.convs,.cpane,.quick,.ncard,.kcard,.ucard,.txd{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--sh1)}
+.rrow{border-left:4px solid var(--c);border-radius:12px}
+.n{background:var(--soft);color:var(--muted)}
+.n.hot{background:var(--red);color:#fff}
+/* tabel bawaan → gaya tabel Bawen */
+main table{border-collapse:collapse}
+main table th{background:#f3f6fa;color:var(--ink2);font-weight:600;font-size:12px;border-bottom:1px solid var(--line)}
+main table td{border-bottom:1px solid #edf1f5}
+:root[data-theme=dark] main table th{background:var(--soft)}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]) main table th{background:var(--soft)}}
+/* dialog → modal Bawen */
+dialog{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:0 30px 70px -20px rgba(14,25,42,.45)}
+dialog::backdrop{background:rgba(14,25,42,.45);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
+.mpop,select option{background:var(--card)}
+.toast{background:var(--navy);color:#fff;border-radius:10px;box-shadow:var(--sh2)}
+/* ---------- kerangka ---------- */
+.shell{grid-template-columns:var(--sidew) minmax(0,1fr) 290px;grid-template-rows:auto 1fr;grid-template-areas:"side top top" "side main users"}
+.shell:has(main[data-view=bc]){grid-template-columns:var(--sidew) minmax(0,1fr) 0}
+.shell:has(main[data-view=bc]) .upanel{display:none}
+.side{grid-area:side;position:sticky;top:0;align-self:start;height:100dvh;overflow:hidden;padding:0;gap:0;display:flex;flex-direction:column;background:var(--navy2);color:#d5e1f0;border:0;z-index:40;transition:transform .32s var(--ease)}
+.slogo{display:flex;align-items:center;gap:11px;padding:16px 18px 14px;border-bottom:1px solid rgba(255,255,255,.07);color:#fff;text-decoration:none}
+.ahg-logo.sl{width:48px;height:40px;background-color:#fff;background-origin:content-box;padding:4px 5px;border-radius:9px;box-sizing:border-box}
+.slogo b{display:block;font-size:15px}.slogo span{display:block;font-size:11px;color:#8ea6c6}
+.sbc{margin:12px 12px 2px;padding:10px 10px 10px;border-radius:10px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08)}
+.sbc label{display:flex;align-items:center;gap:7px;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:#8ea6c6;margin:0 0 7px 2px}
+.sbc label .ico{width:15px;height:15px;color:#9fc2ef}
+.sbc select{width:100%;height:38px;padding:0 10px;border-radius:8px;border:1px solid rgba(255,255,255,.16);background:#163257;color:#fff;font-weight:600;font-size:13.5px;cursor:pointer}
+.sbc select:focus{border-color:#5d9be0;box-shadow:0 0 0 3px rgba(93,155,224,.25)}
+.sbc select option{background:#fff;color:#18212f}
+.snav{flex:1;overflow:auto;padding:4px 10px 14px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.15) transparent}
+.sgrp{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:#6f89ab;padding:16px 10px 6px}
+.snav .nav{position:relative;display:flex;align-items:center;gap:11px;width:100%;padding:8px 10px;margin:1px 0;border-radius:8px;color:#c3d2e6;font-size:13.5px;font-weight:500;text-decoration:none;background:none;box-shadow:none;transition:background var(--t) var(--ease),color var(--t)}
+.snav .nav:hover{background:rgba(255,255,255,.06);color:#fff}
+.snav .nav.on{background:rgba(47,118,201,.22);color:#fff;box-shadow:none}
+.snav .nav.on::before{content:"";position:absolute;left:-10px;top:8px;bottom:8px;width:3px;border-radius:0 3px 3px 0;background:var(--red)}
+.snav .nav .lb{flex:1;line-height:1.3}
+.snav .nav em{font-style:normal;font-size:10.5px;color:#6f89ab;font-weight:600}
+.snav .nav .n{background:rgba(255,255,255,.12);color:#e3ecf8;height:19px;min-width:19px;font-size:11px}
+.snav .nav .n.hot{background:var(--red);color:#fff}.snav .nav .n.grn{background:#1f7a4d;color:#fff}
+.shelp{display:flex;align-items:center;gap:10px;margin:8px 10px 4px;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,.05);color:#d5e1f0;text-decoration:none;transition:background var(--t)}
+.shelp:hover{background:rgba(255,255,255,.1)}
+.shelp .ico{color:#6fd39c}.shelp b{display:block;font-size:12.5px;color:#fff}.shelp span{font-size:11.5px;color:#8ea6c6}
+.side .side-f{margin:0;padding:4px 16px 12px;flex-direction:row;justify-content:space-between;gap:8px;color:#6f89ab;font-size:11px}
+.side .side-f .sync{color:#8ea6c6;font-size:11px;overflow:hidden;text-overflow:ellipsis}
+.top{grid-area:top;position:sticky;top:0;z-index:30;height:var(--toph);display:flex;align-items:center;gap:12px;padding:0 26px;background:rgba(242,244,247,.86);backdrop-filter:saturate(1.4) blur(10px);-webkit-backdrop-filter:saturate(1.4) blur(10px);border-bottom:1px solid var(--line)}
+:root[data-theme=dark] .top{background:rgba(12,21,36,.86)}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]) .top{background:rgba(12,21,36,.86)}}
+.top .menu{display:none}
+.crumb{flex:1;display:flex;align-items:center;gap:6px;font-size:13.5px;color:var(--muted);min-width:0;white-space:nowrap;overflow:hidden}
+.crumb a{color:var(--muted);text-decoration:none}.crumb a:hover{color:var(--blue)}
+.crumb b{color:var(--text);overflow:hidden;text-overflow:ellipsis}
+.crumb .ico.sep{width:14px;height:14px}
+.top-r{display:flex;align-items:center;gap:6px;margin-left:auto}
+.clock{min-width:0;align-items:flex-end;margin-right:4px}
+.clock b{font-size:14px;color:var(--navy);letter-spacing:.02em}
+:root[data-theme=dark] .clock b{color:#9fc2ef}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]) .clock b{color:#9fc2ef}}
+.clock span{font-size:11px;font-weight:500}
+.top .sync{display:inline-flex;align-items:center;height:30px;padding:0 11px;border-radius:20px;font-size:12px;font-weight:600;background:var(--card);border:1px solid var(--line);color:var(--ink2)}
+.top .sync:empty{display:none}
+.bell-btn{width:36px;height:36px;border-radius:9px;border:1px solid transparent;background:transparent;color:var(--ink2);box-shadow:none;text-decoration:none}
+.bell-btn:hover{background:var(--card);border-color:var(--line);color:var(--navy)}
+.bell-btn svg{width:19px;height:19px}
+.tools-btn.on{background:#e9f1fb;border-color:var(--blue);color:var(--navy)}
+.me-btn{display:flex;align-items:center;gap:9px;height:42px;padding:0 8px 0 5px;border-radius:11px;border:1px solid transparent;background:none;box-shadow:none;font-weight:600}
+.me-btn:hover{background:var(--card);border-color:var(--line)}
+.me-btn .av{width:32px;height:32px;border-radius:9px;font-size:12px}
+.me-btn .mn{display:flex;flex-direction:column;text-align:left;line-height:1.2;max-width:180px}
+.me-btn .mn b{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.me-btn .mn small{display:block;background:none;color:var(--muted);font-size:11px;font-weight:500;padding:0;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.me-btn .caret{width:15px;height:15px;color:var(--muted)}
+main{padding:24px clamp(16px,2vw,34px) 70px}
+.upanel{position:sticky;top:var(--toph);height:calc(100dvh - var(--toph));background:var(--card);border-left:1px solid var(--line)}
+/* judul halaman → ikon ubin navy seperti kartu Bawen */
+.head{margin-bottom:16px;align-items:center}
+.head h1{display:flex;align-items:center;flex-wrap:wrap;gap:4px 12px;font-size:22px;font-weight:700;line-height:1.25}
+.head h1>.ei:first-child{width:46px;height:46px;border-radius:12px;background:var(--navy);color:#fff;display:inline-grid;place-items:center;box-shadow:0 8px 18px -10px rgba(20,54,95,.8);flex:none}
+.head h1>.ei:first-child .ico{width:23px;height:23px}
+.hc{font-size:13px;font-weight:500;color:var(--muted);margin:0}
+/* bola chat & cari: di atas area isi, bukan di atas sidebar */
+.chat-fab{left:calc(var(--sidew) + 22px);background:linear-gradient(135deg,var(--blue2),var(--navy));box-shadow:0 10px 24px -8px rgba(20,54,95,.6)}
+.find-fab{left:calc(var(--sidew) + 92px)}
+.find-bar{left:calc(var(--sidew) + 22px)}
+@media (min-width:821px){.chat-fab:has(+ .find-fab:not([hidden])){left:calc(var(--sidew) + 22px)}}
+@media (min-width:821px) and (max-width:1180px){.chat-fab,.chat-fab:has(+ .find-fab:not([hidden])){left:calc(var(--sidew) + 22px)}.find-fab{left:calc(var(--sidew) + 92px)}.find-bar{left:calc(var(--sidew) + 22px)}}
+.chat-fab.on{background:var(--card);color:var(--text)}
+/* Kartu Operasional (iframe /bc/) */
+main[data-view=bc]{padding:0!important}
+.bcwrap{flex:1;display:flex;min-height:calc(100dvh - var(--toph))}
+.bcf{flex:1;display:block;width:100%;height:calc(100dvh - var(--toph));border:0;background:var(--bg)}
+.pad{padding:18px 20px}
+/* ---------- halaman masuk (gaya Bawen) ---------- */
+.authw{min-height:100dvh;display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);background:var(--bg)}
+.abrand{position:relative;overflow:hidden;background:radial-gradient(1200px 600px at 10% -10%,#2a6db5 0%,transparent 60%),linear-gradient(160deg,#18406f 0%,#0e2744 70%);color:#fff;display:flex}
+.bgrid{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.05) 1px,transparent 1px);background-size:44px 44px;-webkit-mask-image:linear-gradient(180deg,#000 0%,transparent 85%);mask-image:linear-gradient(180deg,#000 0%,transparent 85%)}
+.abrand::after{content:"";position:absolute;right:-120px;bottom:-120px;width:420px;height:420px;border:60px solid rgba(198,40,40,.18);transform:rotate(45deg)}
+.bin{position:relative;z-index:1;margin:auto;padding:56px;max-width:560px;animation:arise .7s var(--ease) both}
+.blogo{width:168px;height:132px;padding:16px 18px;background:#fff;border-radius:16px;box-shadow:0 20px 40px -20px rgba(0,0,0,.5);margin-bottom:34px;display:flex}
+.blogo .ahg-logo{flex:1}
+.bin h1{font-size:30px;font-weight:700;line-height:1.2;margin:0}
+.bin h2{font-size:22px;font-weight:500;color:#c9dcf3;margin:4px 0 0}
+.bin p{color:#9fb7d6;margin:10px 0 0}
+.bunits{list-style:none;padding:0;margin:34px 0 0;display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.bunits li{padding:12px 14px;border:1px solid rgba(255,255,255,.14);border-radius:10px;background:rgba(255,255,255,.04)}
+.bunits b{display:block;font-size:15px;letter-spacing:.06em}.bunits span{font-size:12px;color:#a9c0de}
+.bfoot{margin-top:38px;font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:#7f9cc2}
+.authm{grid-area:auto;min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px}
+.acard{width:100%;max-width:430px;background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--sh2);padding:26px 28px 20px;display:flex;flex-direction:column;animation:arise .6s .08s var(--ease) both}
+.acard .amark{display:none;width:120px;height:92px;margin:0 auto 18px}
+.atabs{position:relative;display:grid;grid-template-columns:1fr 1fr;background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:3px;margin-bottom:22px}
+.atabs button{position:relative;z-index:1;height:36px;border:0;background:none;font-weight:600;color:var(--muted);cursor:pointer;transition:color var(--t)}
+.atabs button.on{color:var(--navy)}
+.atabs i{position:absolute;left:3px;top:3px;bottom:3px;width:calc(50% - 3px);background:var(--card);border-radius:8px;box-shadow:var(--sh1);transition:transform .32s var(--ease)}
+.acard h3{font-size:20px;margin:0}
+.acard .asub{margin:4px 0 18px;font-size:13.5px}
+.acard label{display:block;font-size:12.5px;font-weight:600;color:var(--ink2);margin-bottom:14px}
+.acard label>input:not([type=checkbox]),.acard .pw input{display:block;width:100%;height:44px;margin-top:6px;padding:0 13px;border-radius:10px;font-size:14.5px}
+.acard .pw{display:flex;align-items:center;gap:4px;position:relative}
+.acard .pw input{padding-right:44px}
+.acard .pw .ibtn{position:absolute;right:6px;top:50%;transform:translateY(-50%);margin-top:3px}
+.acard .chk-l{margin-bottom:6px;font-size:13px;display:flex!important;align-items:center;gap:8px}
+.acard .chk-l input{width:17px;height:17px;margin:0;accent-color:var(--blue)}
+.authm{justify-content:center!important;padding:40px 20px!important}
+.authm>*{flex-grow:0!important}
+.acard .err{font-size:13px;margin:2px 0 8px;min-height:0}
+.acard .err:not(:empty){background:#fdecec;color:var(--red);border:1px solid #f3c7c7;border-radius:9px;padding:9px 12px}
+.acard .asm{font-size:12px;margin:12px 0 0;text-align:center}
+.ahelp{display:flex;align-items:center;gap:10px;margin-top:18px;padding:12px 14px;border-radius:11px;background:#e7f4ec;color:#145c3a;font-size:13px;text-decoration:none;transition:background var(--t)}
+.ahelp:hover{background:#d9eee2}.ahelp .ico{color:#1d7a4f}
+.acopy{margin-top:18px;font-size:12px;color:var(--muted)}
+@keyframes arise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+/* ---------- tablet: sidebar jadi laci ---------- */
+@media (max-width:1180px){.shell{grid-template-columns:var(--sidew) minmax(0,1fr);grid-template-areas:"side top" "side main"}}
+@media (max-width:960px){
+  .shell{display:block}
+  .side{position:fixed;inset:0 auto 0 0;width:var(--sidew);height:100dvh;transform:translateX(-102%);box-shadow:var(--sh2)}
+  body.drawer .side{transform:none;display:flex}
+  .scrim{display:block;position:fixed;inset:0;z-index:35;background:rgba(14,25,42,.4);opacity:0;pointer-events:none;transition:opacity .3s}
+  body.drawer .scrim{opacity:1;pointer-events:auto}
+  .side{z-index:60}.scrim{z-index:55}
+  body.drawer .chat-fab,body.drawer .find-fab{visibility:hidden}
+  .top{padding:0 12px}.top .menu{display:inline-grid}
+  .chat-fab,.chat-fab:has(+ .find-fab:not([hidden])){left:20px}.find-fab{left:90px}.find-bar{left:20px}
+  .authw{grid-template-columns:1fr}.abrand{display:none}.acard .amark{display:block}
+}
+.scrim{display:none}
+@media (min-width:961px){.scrim{display:none!important}}
+/* ---------- ponsel ---------- */
+@media (max-width:820px){
+  .side{display:flex}
+  .top{height:58px;gap:6px}
+  .crumb{font-size:13px}.crumb>span:first-child,.crumb>.ico.sep:first-of-type{display:none}
+  .clock span{display:none}.clock b{font-size:13px}
+  .me-btn{padding:0 2px}.me-btn .mn,.me-btn .caret{display:none}
+  .help-btn{display:none}
+  .top .sync{display:none}
+  .bell-btn{width:34px;height:34px}
+  main{padding:14px 12px calc(84px + env(safe-area-inset-bottom))}
+  main[data-view=bc]{padding:0!important}
+  .bcwrap{min-height:0}
+  .bcf{height:calc(100dvh - 58px - 64px - env(safe-area-inset-bottom))}
+  .bnav{background:var(--card);border-top:1px solid var(--line)}
+  .bnav button.on{color:var(--navy);background:#e9f1fb}
+  .bnav .ic .ico{width:21px;height:21px}
+  .chat-fab{left:calc((100vw - 8px) / 14 + 4px - 28px)}
+  .find-fab{left:calc(4px + (100vw - 8px) * 13 / 14 - 28px)}
+  .find-bar{left:auto}
+  .head h1{font-size:19px}.head h1>.ei:first-child{width:40px;height:40px;border-radius:11px}
+  .acard{padding:22px 20px 18px}
+}
 </style>
 </head>
 <body>
-<div id="app"><div style="padding:40px;font-family:sans-serif;color:#888">Memuat Virtual Work AHG…</div></div>
+<div id="app"><div style="min-height:100vh;display:grid;place-items:center;font-family:Inter,sans-serif;color:#6a7686;background:#f2f4f7">Memuat Virtual Work AHG…</div></div>
 <dialog id="dlg"></dialog>
 <dialog id="viewer"></dialog>
 <dialog id="cfm"></dialog>
@@ -3043,8 +3255,205 @@ const PJCH = {
   pxM: el => { if (!el.value) return; PJ.exp.m = el.value; PJ.exp.w = 1; $('#px-ref').innerHTML = pxRefHtml(); },
 };
 
+/* Ikon garis gaya Basecamp Bawen (tanpa emoji) — set ikon sama dengan deploy-ahgbawen/js/core.js + tambahan ruang kerja.
+   ikonInit(): emoji pada tombol/judul/menu ditampilkan sebagai ikon garis (hanya tampilan; data & teks tersimpan tidak berubah). */
+const IK = {
+  stok: '<path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"/><path d="m3 8 9 5 9-5"/><path d="M12 13v8"/><path d="m7.5 5.5 9 5"/>',
+  prod: '<path d="M3 21V10l5 3V10l5 3V10l5 3V4h3v17H3Z"/><path d="M7 17h2M12 17h2M17 17h1"/>',
+  jual: '<path d="M4 3h16v18l-3-2-2 2-3-2-3 2-2-2-3 2V3Z"/><path d="M8 8h8M8 12h8M8 16h5"/>',
+  kas: '<rect x="2.5" y="6" width="19" height="13" rx="2"/><path d="M2.5 10h19"/><path d="M16 15h2.5"/><path d="M5 6V4.5h13V6"/>',
+  cust: '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c.6-3.4 3-5.2 6-5.2s5.4 1.8 6 5.2"/><circle cx="17.2" cy="9" r="2.4"/><path d="M16.5 14.4c2.4.2 4 1.7 4.5 4.6"/>',
+  jadwal: '<path d="M2 7h11v9H2z"/><path d="M13 10h4l3.5 3.2V16H13"/><circle cx="6" cy="17.5" r="1.8"/><circle cx="16.5" cy="17.5" r="1.8"/>',
+  bahan: '<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8Z"/><circle cx="7.8" cy="7.8" r="1.4"/>',
+  mt: '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.2L3.5 17.3a1.8 1.8 0 0 0 2.6 2.6l5.8-5.8a4 4 0 0 0 5.2-5.4l-2.5 2.5-2.3-.6-.6-2.3 2.5-2.5Z"/>',
+  bppb: '<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 2.8h6v2.6H9z"/><path d="m8.5 11 1.6 1.6L13 9.7"/><path d="M8.5 16.5h7"/>',
+  mp: '<path d="M4 15a8 8 0 0 1 16 0"/><path d="M2.5 15h19v2.2h-19z"/><path d="M10 7.2V5h4v2.2"/><path d="M12 19v2"/>',
+  mkt: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.3"/>',
+  dev: '<path d="M3 21h18"/><path d="M5 21V11l7-5 7 5v10"/><path d="M9.5 21v-5h5v5"/><path d="M12 6V3"/>',
+  home: '<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v10h13V10"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  search: '<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/>',
+  print: '<path d="M7 9V3h10v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M7 14h10v7H7z"/>',
+  edit: '<path d="M4 20h4L19 9l-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/>',
+  trash: '<path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 13h10l1-13"/><path d="M9 7V4h6v3"/>',
+  wa: '<path d="M4 20l1.3-4A8 8 0 1 1 8.4 19L4 20Z"/><path d="M9 9.2c0 3 2.6 5.6 5.6 5.8l1.2-1.4-1.8-1-1 .8a4.6 4.6 0 0 1-2.4-2.4l.8-1-1-1.8L9 9.2Z"/>',
+  back: '<path d="M15 5l-7 7 7 7"/>',
+  right: '<path d="m9 5 7 7-7 7"/>',
+  down: '<path d="m6 9 6 6 6-6"/>',
+  logout: '<path d="M15 4h4v16h-4"/><path d="M10 8l-4 4 4 4"/><path d="M6 12h11"/>',
+  user: '<circle cx="12" cy="8" r="3.6"/><path d="M4.5 20.5c.8-4 3.8-6 7.5-6s6.7 2 7.5 6"/>',
+  lock: '<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/>',
+  eye: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.8"/>',
+  menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+  close: '<path d="M6 6l12 12M18 6 6 18"/>',
+  check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+  alert: '<path d="M12 3.5 2.5 20h19L12 3.5Z"/><path d="M12 10v4.5M12 17.3v.2"/>',
+  help: '<circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.1-2.4 3.6"/><path d="M12 17v.2"/>',
+  in: '<path d="M12 4v12"/><path d="m7 11 5 5 5-5"/><path d="M4 20h16"/>',
+  out: '<path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 20h16"/>',
+  scale: '<path d="M12 4v16M5 20h14"/><path d="M4 8h16"/><path d="m4 8-2.5 6a3 3 0 0 0 5 0L4 8ZM20 8l-2.5 6a3 3 0 0 0 5 0L20 8Z"/>',
+  layers: '<path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/>',
+  users: '<circle cx="12" cy="8" r="3.4"/><path d="M5 20c.6-3.6 3.4-5.6 7-5.6s6.4 2 7 5.6"/>',
+  cal: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+  refresh: '<path d="M20 11a8 8 0 0 0-14.6-4.5L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.6 4.5L20 16"/><path d="M20 20v-4h-4"/>',
+  file: '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><path d="M9 12h6M9 16h6"/>',
+  send: '<path d="M21 3 10 14"/><path d="M21 3l-7 18-4-7-7-4 18-7Z"/>',
+  tag: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11M14 13h4M14 16.5h4"/>',
+  org: '<rect x="9" y="3" width="6" height="4.5" rx="1"/><rect x="2.5" y="16.5" width="6" height="4.5" rx="1"/><rect x="9" y="16.5" width="6" height="4.5" rx="1"/><rect x="15.5" y="16.5" width="6" height="4.5" rx="1"/><path d="M12 7.5v9M5.5 16.5V12h13v4.5"/>',
+  copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>',
+  grid: '<rect x="3" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5"/>',
+  clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  alarm: '<circle cx="12" cy="13" r="7.5"/><path d="M12 9.5V13l2.5 1.5"/><path d="M4 4.5 6.5 2.5M20 4.5l-2.5-2"/>',
+  chat: '<path d="M4 5h16v11H9l-5 4V5Z"/><path d="M8 9.5h8M8 12.5h5"/>',
+  task: '<rect x="3.5" y="3.5" width="17" height="17" rx="3"/><path d="m8 12 3 3 5-6"/>',
+  game: '<rect x="2.5" y="7" width="19" height="11" rx="5"/><path d="M7 11v3M5.5 12.5h3"/><circle cx="15.5" cy="11.5" r=".9"/><circle cx="17.8" cy="13.8" r=".9"/>',
+  tools: '<rect x="2.5" y="7" width="19" height="13" rx="2"/><path d="M9 7V5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 5v2"/><path d="M2.5 12.5h19"/><path d="M10.5 11v3h3v-3"/>',
+  crown: '<path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5L3 8Z"/>',
+  bell: '<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15L6 16Z"/><path d="M10 20.5a2 2 0 0 0 4 0"/>',
+  mega: '<path d="M3 10v4h3l7 4V6L6 10H3Z"/><path d="M16.5 9a4 4 0 0 1 0 6"/><path d="M19 6.5a7.5 7.5 0 0 1 0 11"/>',
+  whisper: '<path d="M4 5h16v11H9l-5 4V5Z"/><path d="M9 10.5h6"/><rect x="10" y="8" width="4" height="0" rx="0"/>',
+  clip: '<path d="m20 11.5-7.8 7.8a5 5 0 0 1-7.1-7.1l8.1-8.1a3.3 3.3 0 0 1 4.7 4.7l-8 8a1.7 1.7 0 0 1-2.4-2.4l7.3-7.3"/>',
+  upload: '<path d="M12 15V3.5"/><path d="m7 8 5-5 5 5"/><path d="M4 14.5V20h16v-5.5"/>',
+  download: '<path d="M12 3.5V15"/><path d="m7 10.5 5 5 5-5"/><path d="M4 14.5V20h16v-5.5"/>',
+  pdf: '<path d="M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V8l-5-5Z"/><path d="M14 3v5h5"/><path d="M8.5 15.5h7M8.5 12h4"/>',
+  xls: '<rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M3.5 9h17M3.5 14.5h17M9.5 9v11.5"/>',
+  image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="9.5" r="1.8"/><path d="m21 16-5-5-9 9"/>',
+  link: '<path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/>',
+  pin: '<path d="M12 21s-6.5-6-6.5-11a6.5 6.5 0 0 1 13 0c0 5-6.5 11-6.5 11Z"/><circle cx="12" cy="10" r="2.3"/>',
+  pushpin: '<path d="M9 3h6l-1 6 3.5 3.5h-11L10 9 9 3Z"/><path d="M12 12.5V21"/>',
+  repeat: '<path d="M17 2.5 20.5 6 17 9.5"/><path d="M3.5 11V9a3 3 0 0 1 3-3h14"/><path d="M7 21.5 3.5 18 7 14.5"/><path d="M20.5 13v2a3 3 0 0 1-3 3h-14"/>',
+  up: '<path d="M12 19V5M6 11l6-6 6 6"/>',
+  sign: '<path d="M3 17c3-1 4-6 6-6s-1 7 2 7 3-4 5-4 2 3 5 3"/><path d="M3 21h18"/>',
+  cloud: '<path d="M7 18.5h10.5a4 4 0 0 0 .6-8 6 6 0 0 0-11.6 1.5A3.3 3.3 0 0 0 7 18.5Z"/>',
+  hand: '<path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V11M11 10V4a1.5 1.5 0 0 1 3 0v7M14 10.5V5.5a1.5 1.5 0 0 1 3 0v8c0 4-2.5 7-6.5 7-3 0-4.5-1.5-6-4l-2-3.3a1.5 1.5 0 0 1 2.5-1.6L8 13"/>',
+  book: '<path d="M4 4.5A1.5 1.5 0 0 1 5.5 3H19v15H5.5A1.5 1.5 0 0 0 4 19.5v-15Z"/><path d="M4 19.5A1.5 1.5 0 0 0 5.5 21H19v-3"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+  folder: '<path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2.5h8.5A1.5 1.5 0 0 1 21 9v9.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5v-12Z"/>',
+  archive: '<rect x="3" y="4" width="18" height="4.5" rx="1"/><path d="M5 8.5V19a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8.5"/><path d="M10 12.5h4"/>',
+  key: '<circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l2.5 2.5M15 8l2 2"/>',
+  sound: '<path d="M4 9.5v5h3.5L12 18V6L7.5 9.5H4Z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>',
+  mute: '<path d="M4 9.5v5h3.5L12 18V6L7.5 9.5H4Z"/><path d="m16 9.5 5 5M21 9.5l-5 5"/>',
+  thumb: '<path d="M7 10.5v10H4v-10h3Z"/><path d="M7 10.5 11 3a2 2 0 0 1 2.5 2.4L12.8 9H19a2 2 0 0 1 2 2.3l-1.2 7.5a2 2 0 0 1-2 1.7H7"/>',
+  wave: '<path d="M7 13V7a1.5 1.5 0 0 1 3 0v4M10 10V5a1.5 1.5 0 0 1 3 0v6M13 10.5V6.5a1.5 1.5 0 0 1 3 0V14c0 4-2.5 6.5-6 6.5-2.6 0-4-1.3-5.5-3.6L3.6 15a1.4 1.4 0 0 1 2.3-1.6L7 15"/><path d="M18.5 4.5c1 .8 1.6 2 1.8 3.2"/>',
+  music: '<path d="M9 18V5l11-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/>',
+  video: '<rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10 5-3v10l-5-3"/>',
+  palette: '<path d="M12 3a9 9 0 1 0 0 18c1.2 0 1.8-.8 1.8-1.7 0-1.3-1-1.6-1-2.8 0-1 .8-1.6 1.8-1.6H17a4 4 0 0 0 4-4C21 6.6 17 3 12 3Z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="15" cy="7.2" r="1"/>',
+  moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.5 12h-2M21.5 12h-2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4"/>',
+  save: '<path d="M5 3h11l4 4v12.5a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19.5v-15A1.5 1.5 0 0 1 5 3Z"/><path d="M8 3v5h7V3M8 21v-6h8v6"/>',
+  info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.6v.1"/>',
+  star: '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3l-5.6 2.9 1.1-6.2L3 9.6l6.2-.9L12 3Z"/>',
+  at: '<circle cx="12" cy="12" r="3.8"/><path d="M15.8 12v1.5a2.7 2.7 0 0 0 5.2 1V12a9 9 0 1 0-3.6 7.2"/>',
+  settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/>',
+  basecamp: '<path d="M3 20V9l9-5 9 5v11"/><path d="M8 20v-6h8v6"/><path d="M3 20h18"/>'
+};
+const ico = (n, cls = '') => '<svg class="ico ' + cls + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (IK[n] || '') + '</svg>';
+const EMO = { '📊': 'grid', '⏰': 'alarm', '💬': 'chat', '✅': 'task', '💰': 'kas', '🏭': 'prod', '📅': 'cal', '📆': 'cal', '🗓': 'cal', '🎮': 'game', '🧰': 'tools', '👥': 'users', '👑': 'crown',
+  '📣': 'mega', '🤫': 'whisper', '📎': 'clip', '🏷': 'tag', '📤': 'upload', '📥': 'download', '⬇': 'download', '⬆': 'up', '📕': 'pdf', '📗': 'xls', '📘': 'book', '📙': 'file', '📄': 'file', '📑': 'file', '📋': 'copy',
+  '✏': 'edit', '✍': 'sign', '🗑': 'trash', '🔍': 'search', '🖼': 'image', '🔗': 'link', '🔔': 'bell', '📦': 'stok', '📍': 'pin', '📌': 'pushpin', '🚚': 'jadwal', '🖨': 'print', '🔁': 'repeat',
+  '☁': 'cloud', '🙋': 'hand', '🏗': 'dev', '🌐': 'globe', '🗂': 'folder', '🗄': 'archive', '🗜': 'layers', '🕘': 'clock', '🔑': 'key', '🔊': 'sound', '🔇': 'mute', '👍': 'thumb', '👋': 'wave', '👁': 'eye',
+  '🎵': 'music', '🎬': 'video', '🎨': 'palette', '🌙': 'moon', '☀': 'sun', '➕': 'plus', '＋': 'plus', '⚠': 'alert', '💾': 'save', '⧉': 'copy', '☰': 'menu', '🏠': 'home', '⚙': 'settings', 'ℹ': 'info', '🔒': 'lock', '📝': 'edit', '🗒': 'file', '📁': 'folder', '📂': 'folder', '🔄': 'refresh', '🛠': 'mt', '📈': 'prod', '📉': 'out', '👤': 'user' };
+const EMO_RE = new RegExp('(' + Object.keys(EMO).join('|') + ')\uFE0F?', 'gu');
+const EMO_SKIP = 'input,textarea,select,option,script,style,svg,[contenteditable],main[data-view=wait] > :not(.head),.c-list,.bub,[data-raw],.ahg-logo,.no-ico';
+function ikonText(t) {
+  if (!t.nodeValue || !EMO_RE.test(t.nodeValue)) return;
+  EMO_RE.lastIndex = 0;
+  const p = t.parentElement; if (!p || p.closest(EMO_SKIP)) return;
+  const f = document.createDocumentFragment(); let last = 0, m; const s = t.nodeValue;
+  EMO_RE.lastIndex = 0;
+  while ((m = EMO_RE.exec(s))) {
+    if (m.index > last) f.appendChild(document.createTextNode(s.slice(last, m.index)));
+    const sp = document.createElement('span'); sp.className = 'ei'; sp.innerHTML = ico(EMO[m[1]]); f.appendChild(sp);
+    last = m.index + m[0].length;
+    if (s[last] === ' ') { f.appendChild(document.createTextNode(' ')); last++; }
+  }
+  if (last < s.length) f.appendChild(document.createTextNode(s.slice(last)));
+  t.replaceWith(f);
+}
+function ikonOpt(o) { const v = o.textContent; EMO_RE.lastIndex = 0; if (EMO_RE.test(v)) { EMO_RE.lastIndex = 0; o.textContent = v.replace(EMO_RE, '').replace(/^\s+/, ''); } EMO_RE.lastIndex = 0; }
+function ikonScan(root) {
+  if (root.nodeType === 3) return ikonText(root);
+  if (root.nodeType !== 1) return;
+  if (root.tagName === 'OPTION') return ikonOpt(root);
+  root.querySelectorAll && root.querySelectorAll('option').forEach(ikonOpt);
+  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); const list = [];
+  for (let n = w.nextNode(); n; n = w.nextNode()) { EMO_RE.lastIndex = 0; if (EMO_RE.test(n.nodeValue)) list.push(n); }
+  EMO_RE.lastIndex = 0; list.forEach(ikonText);
+}
+function ikonInit() {
+  ikonScan(document.body);
+  new MutationObserver(ms => { for (const m of ms) { if (m.type === 'characterData') ikonText(m.target); else m.addedNodes.forEach(ikonScan); } })
+    .observe(document.body, { childList: true, subtree: true, characterData: true });
+}
+
+// Kartu Operasional per basecamp (15 kartu Basecamp Bawen) + pilihan basecamp global.
+// Kartu tampil di <iframe> /bc/?bc=<basecamp>#/<kartu> (kode modul situs ahgbawen, data lewat fungsi bc_* dengan sesi Virtual Work).
+// 'Bawen' = data live ahgbawen.github.io; basecamp lain = data sendiri; '' (Semua Basecamp) = rekap semua basecamp.
+const KARTU = [['stok', 'Stok Material', 'stok'], ['prod', 'Produksi', 'prod'], ['jual', 'Penjualan', 'jual'], ['kas', 'Cash Flow Unit', 'kas'], ['cust', 'Customer Unit', 'cust'],
+  ['jadwal', 'Jadwal Pengiriman', 'jadwal'], ['bahan', 'Bahan & Supplier', 'bahan'], ['mt', 'Maintenance Alat', 'mt'], ['bppb', 'BPPB', 'bppb'], ['mp', 'Man Power', 'mp'],
+  ['mkt', 'Marketing', 'mkt'], ['dev', 'Pengembangan Basecamp', 'dev'], ['pl', 'Price List', 'tag'], ['hpp', 'HPP & BUASO', 'scale'], ['org', 'Struktur Organisasi', 'org']];
+const VICON = { home: 'grid', reminder: 'alarm', chat: 'chat', task: 'task', cash: 'kas', unit: 'prod', proyeksi: 'cal', wait: 'game', tools: 'tools', users: 'users', admin: 'crown', bc: 'basecamp' };
+const BC_OK = b => /^[A-Za-z0-9][A-Za-z0-9 ._-]{1,39}$/.test(b || '');
+const bcLabel = () => S.bc ? 'Basecamp ' + S.bc : 'Semua Basecamp';
+const kartuTitle = r => (KARTU.find(k => k[0] === r) || [])[1] || (S.bc ? 'Ringkasan Basecamp' : 'Rekap Semua Basecamp');
+function setBc(b) {
+  S.bc = b || ''; LS.set('bc.sel', S.bc);
+  S.unit.bc = S.bc; // Unit & Stok ikut basecamp terpilih
+  try { if (typeof PJ !== 'undefined' && PJ) { PJ.bc = S.bc; LS.set('pj.bc', S.bc); } } catch {}
+}
+function bcSrc() { return '/bc/?bc=' + encodeURIComponent(S.bc || '*') + '#/' + S.bcr; }
+function vKartu() {
+  if (S.bc && !BC_OK(S.bc)) return `<div class="card pad"><h2>Nama basecamp tidak didukung</h2><p class="muted">Kartu Operasional hanya untuk nama basecamp berhuruf/angka (boleh spasi, titik, minus). Pilih basecamp lain di menu kiri.</p></div>`;
+  return `<div class="bcwrap"><iframe id="bcf" class="bcf" title="Kartu Operasional ${esc(bcLabel())}" data-bc="${esc(S.bc || '*')}" src="${esc(bcSrc())}"></iframe></div>`;
+}
+function bcFrameSync() { // pindah kartu tanpa memuat ulang iframe (basecamp sama)
+  const f = $('#bcf'); if (!f || S.view !== 'bc') return;
+  try { const w = f.contentWindow; if (w && w.location.pathname.startsWith('/bc/')) { const h = '#/' + S.bcr; if (w.location.hash !== h && !(h === '#/' && !w.location.hash)) w.location.hash = h; } } catch {}
+}
+function bcBusy() { // jangan muat ulang halaman (update build) saat ada form/antrian di kartu
+  try { const w = $('#bcf')?.contentWindow; return !!w && ((w.MODALS && w.MODALS.length) || (w.S && w.S.queue && w.S.queue.length) || w.document.activeElement?.matches?.('input,textarea,select')); } catch { return false; }
+}
+function bcGo(r) { if (dlg().open) closeAll(); document.body.classList.remove('drawer'); S.bcr = r || ''; if (S.view !== 'bc') go('bc'); else { renderNav(); bcFrameSync(); } }
+function bcCrumb() {
+  const c = $('#crumb'); if (!c) return;
+  const sep = ico('right', 'sep');
+  const h = S.view === 'bc' ? `<span>Kartu Operasional</span>${sep}<a href="#" data-a="bcGo" data-r="">${esc(bcLabel())}</a>${S.bcr ? sep + `<b>${esc(kartuTitle(S.bcr))}</b>` : ''}`
+    : `<span>Ruang Kerja</span>${sep}<b>${esc(VIEWS[S.view]?.[1] || '')}</b>`;
+  setHTML(c, h);
+}
+function bcSelect() {
+  const bcs = basecamps();
+  return `<div class="sbc"><label for="bc-sel">${ico('basecamp')}<span>Basecamp</span></label><select id="bc-sel" data-ch="bcSel" data-keep="0" title="Pilih basecamp — laporan per basecamp">
+    <option value="" ${!S.bc ? 'selected' : ''}>Semua Basecamp</option>${bcs.map(b => `<option value="${esc(b)}" ${S.bc === b ? 'selected' : ''}>${esc(b)}</option>`).join('')}${S.bc && !bcs.includes(S.bc) ? `<option value="${esc(S.bc)}" selected>${esc(S.bc)}</option>` : ''}<option value="+">+ Tambah basecamp…</option></select></div>`;
+}
+async function bcAdd() {
+  const ok = await confirmDlg('Tambah basecamp baru', 'Tambah', false, `<input id="bc-new" class="full" maxlength="40" placeholder="Nama basecamp, mis. Kaliwiro" autocomplete="off">`);
+  const n = ok ? ($('#bc-new')?.value || '').trim().replace(/\s+/g, ' ') : '';
+  if (!n) { renderNav(); return; }
+  if (!BC_OK(n)) { toast('Nama basecamp hanya huruf/angka, spasi, titik atau minus (2–40 karakter).', 'warn'); renderNav(); return; }
+  if (!basecamps().includes(n)) create('unitopt', { type: 'basecamp', name: n }, { quiet: 1 });
+  setBc(n); render(); bcFrameSync();
+}
+// jembatan untuk iframe /bc/ (asal sama)
+window.AHG_BC = {
+  list: () => basecamps().filter(BC_OK),
+  display: () => uname(S.me?.name),
+  authLost: () => authLost(),
+  logout: () => logout(),
+  onRoute(bc, r, title) { if ((bc === '*' ? '' : bc) !== S.bc || S.view !== 'bc') return; if (S.bcr !== r) { S.bcr = r; renderNav(); } },
+  pick(bc, r) { setBc(bc); S.bcr = r || ''; if (S.view !== 'bc') go('bc'); else render(); }
+};
+const KA = {
+  bcGo: el => bcGo(el.dataset.r),
+  drawer: () => document.body.classList.toggle('drawer'),
+  drawerClose: () => document.body.classList.remove('drawer'),
+};
+const KCH = {
+  bcSel: el => { if (el.value === '+') { bcAdd(); return; } setBc(el.value); render(); }
+};
+
 // Virtual Work AHG — reminder, global chat (+ whisper), task (+ rutin mingguan) dan kasbon tim. Data di Supabase (proyek ahg-produksi), sinkron real time.
-const BUILD = '20261122-192912';
+const BUILD = '20261123-141808';
 const SB_URL = 'https://herltzublcqpbgyxbbyp.supabase.co', SB_KEY = 'sb_publishable_FMSC0iqDRLsRXtvTtZX0Ow_piPi5bli'; // public key; tables closed, only ahg_* functions
 // File → Google Drive yulius.krisnawan (folder "AHG Produksi", 5 GiB) lewat Edge Function ahg-file: cek login, buka sesi upload Drive
 // (browser kirim byte langsung ke Google), unduh diproksikan per 8 MiB. Cadangan saat Drive terputus: Supabase Storage (bucket ahg-files).
@@ -3097,10 +3506,10 @@ const slug = s => String(s).normalize('NFKD').replace(/[^\w\s-]/g, '').trim().re
 
 const PALETTE = { blue: ['Biru', '#3b82f6'], green: ['Hijau', '#16a34a'], teal: ['Toska', '#0d9488'], orange: ['Oranye', '#f59e0b'], red: ['Merah', '#ef4444'], purple: ['Ungu', '#8b5cf6'], pink: ['Merah muda', '#ec4899'], gray: ['Abu', '#64748b'] };
 const NOTE_COLORS = { '': ['Tanpa warna', 'transparent'], red: ['Merah', '#f28b82'], orange: ['Oranye', '#fbbc04'], yellow: ['Kuning', '#fff475'], green: ['Hijau', '#ccff90'], teal: ['Toska', '#a7ffeb'], blue: ['Biru', '#aecbfa'], purple: ['Ungu', '#d7aefb'], pink: ['Merah muda', '#fdcfe8'], gray: ['Abu', '#d3d6db'] };
-const ACCENTS = { '#1f6fc0': 'Biru AHG (logo)', '#d62b2b': 'Merah AHG (logo)', '#1a8566': 'Hijau', '#2563eb': 'Biru', '#7c3aed': 'Ungu', '#db2777': 'Pink', '#e07b00': 'Oranye', '#dc2626': 'Merah', '#0d9488': 'Toska', '#475569': 'Abu' };
+const ACCENTS = { '#1f5fae': 'Biru Basecamp (bawaan)', '#1f6fc0': 'Biru AHG (logo)', '#d62b2b': 'Merah AHG (logo)', '#1a8566': 'Hijau', '#2563eb': 'Biru', '#7c3aed': 'Ungu', '#db2777': 'Pink', '#e07b00': 'Oranye', '#dc2626': 'Merah', '#0d9488': 'Toska', '#475569': 'Abu' };
 const AV_COLORS = ['#1a8566', '#2563eb', '#7c3aed', '#db2777', '#e07b00', '#dc2626', '#0d9488', '#475569', '#9333ea', '#0891b2'];
 const STATUS = { todo: ['Belum', '○'], doing: ['Proses', '◐'], done: ['Selesai', '●'] };
-const VIEWS = { home: ['📊', 'Dashboard'], reminder: ['⏰', 'Reminder'], chat: ['💬', 'Global Chat'], task: ['✅', 'Task'], cash: ['💰', 'Cash'], unit: ['🏭', 'Unit'], proyeksi: ['📅', 'Proyeksi Produksi'], wait: ['🎮', 'Waiting'], tools: ['🧰', 'Tools'], users: ['👥', 'Users'], admin: ['👑', 'Admin'] };
+const VIEWS = { home: ['📊', 'Dashboard'], reminder: ['⏰', 'Reminder'], chat: ['💬', 'Global Chat'], task: ['✅', 'Task'], cash: ['💰', 'Cash'], unit: ['🏭', 'Unit'], proyeksi: ['📅', 'Proyeksi Produksi'], wait: ['🎮', 'Waiting'], tools: ['🧰', 'Tools'], users: ['👥', 'Users'], admin: ['👑', 'Admin'], bc: ['🏗', 'Kartu Operasional'] };
 
 // ---------- state ----------
 const now0 = new Date();
@@ -3112,8 +3521,10 @@ const S = {
   task: { files: null, fq: '', links: false, tab: 'all', q: '', who: '', week: 0, layout: LS.get('task.layout') || 'grid' },
   unit: { cat: 'produksi', p: 'month', ref: today(), from: '', to: '', bc: '', u: '', mk: '', q: '' },
   cash: { cat: '', p: 'month', ref: today(), from: '', to: '', q: '', who: '' },
-  rep: null, sync: { busy: false, again: false, at: null, err: '' }, dlg: null
+  rep: null, sync: { busy: false, again: false, at: null, err: '' }, dlg: null,
+  bc: LS.get('bc.sel') ?? '', bcr: '' // basecamp terpilih ('' = semua) + kartu operasional aktif (src/kartu.js)
 };
+S.unit.bc = S.bc; // halaman Unit mengikuti basecamp terpilih
 const isAdmin = () => S.me?.role === 'admin';
 const live = kind => [...S.items.values()].filter(i => i.kind === kind && !i.deleted);
 const canEdit = it => isAdmin() || it.owner === S.me?.name;
@@ -3414,12 +3825,12 @@ function toast(html, type = 'info', onClick, ms = 6000) {
 }
 
 // ---------- theme ----------
-const theme = () => ({ mode: 'auto', accent: '#1f6fc0', scale: 100, ...jget('theme', {}) });
+const theme = () => ({ mode: 'light', accent: '#1f5fae', scale: 100, ...jget('theme', {}) }); // bawaan = terang + biru Basecamp Bawen
 function applyTheme() {
   const t = theme(), r = document.documentElement;
   if (t.mode === 'auto') delete r.dataset.theme; else r.dataset.theme = t.mode;
   r.style.setProperty('--acc', t.accent); document.body.style.zoom = t.scale === 100 ? '' : t.scale / 100;
-  $('meta[name=theme-color]')?.setAttribute('content', t.accent);
+  $('meta[name=theme-color]')?.setAttribute('content', '#14365f');
 }
 function setTheme(p) { LS.set('theme', JSON.stringify({ ...theme(), ...p })); applyTheme(); savePref({ theme: theme() }); }
 function savePref(p) { if (!S.me) return; const cur = pref(); if (cur) put({ ...cur, data: { ...cur.data, ...p } }, true); else create('pref', p); }
@@ -3473,21 +3884,28 @@ function render() {
   if (!$('.shell')) renderShell();
   renderNav(); renderMain(); renderUsers(); showSync(); refreshDialog();
 }
-function renderLogin(keep) {
+function renderLogin(keep) { // gaya halaman masuk Basecamp Bawen: panel merek kiri + kartu formulir
   const reg = S.lmode === 'reg', last = keep?.user ?? (reg ? '' : LS.get('lastuser') || '');
-  app().innerHTML = `<div class="login"><form class="lcard" id="login-form" autocomplete="on">
-    <div class="lbrand"><span class="ahg-logo big" role="img" aria-label="PT. Armada Hada Graha"></span><h1>Virtual Work AHG</h1><p class="muted">PT. Armada Hada Graha · ruang kerja tim</p></div>
-    <div class="lseg" role="tablist"><button type="button" role="tab" class="${reg ? '' : 'on'}" data-a="lMode" data-m="in">Masuk</button><button type="button" role="tab" class="${reg ? 'on' : ''}" data-a="lMode" data-m="reg">Daftar akun</button></div>
+  const units = [['AMP', 'Asphalt Mixing Plant'], ['CMP', 'Concrete Mixing Plant'], ['SCP', 'Stone Crusher Plant'], ['PCP', 'Precast Concrete Plant']];
+  app().innerHTML = `<div class="authw"><aside class="abrand"><div class="bgrid"></div><div class="bin">
+    <div class="blogo"><span class="ahg-logo" role="img" aria-label="Logo PT. Armada Hada Graha"></span></div>
+    <h1>Sistem Informasi Produksi</h1><h2>Virtual Work AHG</h2><p>PT. Armada Hada Graha · semua basecamp</p>
+    <ul class="bunits">${units.map(([k, n]) => `<li><b>${k}</b><span>${n}</span></li>`).join('')}</ul>
+    <div class="bfoot">Trust and Integrity</div></div></aside>
+  <main class="authm"><form class="acard" id="login-form" autocomplete="on">
+    <span class="ahg-logo amark" role="img" aria-label="PT. Armada Hada Graha"></span>
+    <div class="atabs" role="tablist"><button type="button" role="tab" class="${reg ? '' : 'on'}" data-a="lMode" data-m="in">Masuk</button><button type="button" role="tab" class="${reg ? 'on' : ''}" data-a="lMode" data-m="reg">Daftar Akun</button><i style="transform:translateX(${reg ? 100 : 0}%)"></i></div>
+    <h3>${reg ? 'Daftar akun baru' : 'Selamat datang'}</h3><p class="muted asub">${reg ? 'Buat nama pengguna dan password, lalu masukkan kode referral dari admin.' : 'Masuk dengan nama pengguna yang terdaftar.'}</p>
     <label>Nama pengguna<input id="l-user" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" value="${esc(last)}" placeholder="mis. budi" required></label>
-    <label>Password<span class="pw"><input id="l-pass" name="password" type="password" autocomplete="${reg ? 'new-password' : 'current-password'}" value="${esc(keep?.pass || '')}" required><button type="button" class="ib" data-a="pwShow" title="Tampilkan">👁</button></span></label>
+    <label>Password<span class="pw"><input id="l-pass" name="password" type="password" autocomplete="${reg ? 'new-password' : 'current-password'}" value="${esc(keep?.pass || '')}" required><button type="button" class="ibtn sm" data-a="pwShow" title="Tampilkan" aria-label="Lihat password">${ico('eye')}</button></span></label>
     ${reg ? `<label>Ulangi password<input id="l-pass2" type="password" autocomplete="new-password" required></label>
-    <label>Kode referral<input id="l-ref" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Kode dari admin" required></label>` : ''}
+    <label>Kode referral<input id="l-ref" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Masukkan kode referral dari admin" required></label>` : ''}
     <label class="chk-l"><input type="checkbox" id="l-rem" checked> Tetap masuk di perangkat ini</label>
     <p class="err" id="l-err">${esc(S.loginMsg || '')}</p>
-    <button class="btn primary big" id="l-btn" type="submit">${reg ? 'Daftar & masuk' : 'Masuk'}</button>
-    ${reg ? `<div class="lref"><span class="muted small">Belum punya kode referral?</span><a class="btn wa-btn" href="${esc(WA_ADMIN)}" target="_blank" rel="noopener">${WA_SVG} Hubungi Admin</a></div>`
-      : `<p class="muted small">Belum punya akun? <a href="#" data-a="lMode" data-m="reg">Daftar akun</a> dengan kode referral dari admin.</p>`}
-  </form></div>`;
+    <button class="btn pri block" id="l-btn" type="submit">${reg ? 'Daftar & Masuk' : 'Masuk'}</button>
+    <p class="muted asm">${reg ? 'Belum punya kode referral? Hubungi admin melalui WhatsApp di bawah.' : 'Belum punya akun? <a href="#" data-a="lMode" data-m="reg">Daftar akun</a> dengan kode referral dari admin.'}</p>
+    <a class="ahelp" href="${esc(reg ? WA_ADMIN : WA_HELP)}" target="_blank" rel="noopener">${ico('wa')}<span>Butuh bantuan? Hubungi admin <b>+62 822-9977-4825</b></span></a>
+  </form><p class="acopy">&copy; ${new Date().getFullYear()} PT. Armada Hada Graha</p></main></div>`;
   S.loginMsg = '';
   (last ? $('#l-pass') : $('#l-user')).focus();
 }
@@ -3495,14 +3913,15 @@ const WA_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="tru
 const TOOLS_SVG = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M9 3.5h6A2 2 0 0 1 17 5.5V7h3a2 2 0 0 1 2 2v3.5h-7.5v-1h-5v1H2V9a2 2 0 0 1 2-2h3V5.5a2 2 0 0 1 2-2Zm0 2V7h6V5.5ZM2 14h7.5v1.5h5V14H22v4.5a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2Z"/></svg>';
 const CHAT_SVG = '<svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><path fill="currentColor" d="M12 3C6.5 3 2 6.6 2 11.1c0 2.5 1.4 4.7 3.6 6.2L4.8 21l4.2-2.3c.9.2 1.9.4 3 .4 5.5 0 10-3.6 10-8S17.5 3 12 3Z"/><circle cx="7.8" cy="11.1" r="1.35" fill="var(--acc)"/><circle cx="12" cy="11.1" r="1.35" fill="var(--acc)"/><circle cx="16.2" cy="11.1" r="1.35" fill="var(--acc)"/></svg>';
 const CLOSE_SVG = '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path stroke="currentColor" stroke-width="2.6" stroke-linecap="round" d="M6 6l12 12M18 6 6 18"/></svg>';
-function renderShell() {
+function renderShell() { // kerangka gaya Basecamp Bawen: sidebar navy (logo, basecamp, menu, kartu operasional), header dengan jejak halaman
   app().innerHTML = `<div class="shell">
-    <header class="top">
-      <div class="clock" id="clock"><b id="clk-t">--:--:--</b><span id="clk-d"></span></div>
-      <div class="brand"><span class="ahg-logo hdr" role="img" aria-label="PT. Armada Hada Graha"></span><span class="bt">Virtual Work AHG</span></div>
-      <div class="top-r"><span class="sync"></span><button type="button" class="bell-btn tools-btn" data-a="toolsBtn" id="tools-btn" title="Tools · aplikasi pendukung">${TOOLS_SVG}</button><button type="button" class="bell-btn" data-a="bellOpen" id="bell-btn" title="Notifikasi"></button><button type="button" class="me-btn" data-a="profile" id="me-btn"></button><div class="bell-pop card" id="bell-pop" hidden></div></div>
-    </header>
     <aside class="side" id="side"></aside>
+    <div class="scrim" data-a="drawerClose"></div>
+    <header class="top">
+      <button type="button" class="ibtn menu" data-a="drawer" aria-label="Menu">${ico('menu')}</button>
+      <div class="crumb" id="crumb"></div>
+      <div class="top-r"><div class="clock" id="clock"><b id="clk-t">--:--:--</b><span id="clk-d"></span></div><span class="sync"></span><button type="button" class="bell-btn tools-btn" data-a="toolsBtn" id="tools-btn" title="Tools · aplikasi pendukung">${ico('tools')}</button><button type="button" class="bell-btn" data-a="bellOpen" id="bell-btn" title="Notifikasi"></button><a class="bell-btn help-btn" target="_blank" rel="noopener" href="${esc(WA_HELP)}" title="Bantuan admin via WhatsApp">${ico('help')}</a><button type="button" class="me-btn" data-a="profile" id="me-btn"></button><div class="bell-pop card" id="bell-pop" hidden></div></div>
+    </header>
     <main id="main"></main>
     <aside class="upanel" id="users"></aside>
     <nav class="bnav" id="bnav"></nav>
@@ -3512,6 +3931,7 @@ function renderShell() {
   </div>`;
   tickClock();
 }
+const WA_HELP = 'https://wa.me/6282299774825?text=' + encodeURIComponent('Halo Admin, saya butuh bantuan untuk aplikasi Virtual Work AHG.');
 function tickClock() {
   const d = new Date(), t = $('#clk-t'); if (!t) return;
   t.textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
@@ -3529,18 +3949,27 @@ function renderNav() {
   const b = badges(), on = S.users.filter(online).length;
   const items = ['home', 'reminder', 'task', 'cash', 'unit', 'proyeksi', 'wait', 'users', ...(isAdmin() ? ['admin'] : [])];
   const n = { reminder: b.rem, chat: b.chat, task: b.task, wait: waitBadge(), users: on };
-  setHTML($('#side'), items.map(v => (v === 'wait' ? CMP_NAV : '') + `<button type="button" class="nav ${S.view === v ? 'on' : ''} nv-${v}" data-a="go" data-v="${v}"><span class="ic">${VIEWS[v][0]}</span><span class="lb">${VIEWS[v][1]}</span>${n[v] ? `<span class="n ${v === 'chat' ? 'hot' : v === 'users' ? 'grn' : ''}">${n[v]}</span>` : ''}</button>`).join('')
-    + `<div class="side-f"><span class="sync"></span><span class="muted small">versi ${BUILD}</span></div>`);
-  setHTML($('#bnav'), ['home', 'reminder', 'task', 'cash', 'unit', 'wait', 'users'].map(v => `<button type="button" class="${S.view === v || (v === 'unit' && S.view === 'proyeksi') ? 'on' : ''}" data-a="go" data-v="${v}"><span class="ic">${VIEWS[v][0]}${n[v] && v !== 'users' ? `<i class="dot ${v === 'chat' ? 'hot' : ''}">${n[v] > 99 ? '99+' : n[v]}</i>` : ''}</span><span>${v === 'chat' ? 'Chat' : v === 'home' ? 'Home' : VIEWS[v][1]}</span></button>`).join(''));
-  setHTML($('#me-btn'), `${av(S.me.name)}<span class="mn">${esc(uname(S.me.name))}${isAdmin() ? ' <small>Admin</small>' : ''}</span><span class="caret">▾</span>`);
+  const nav = (v) => `<button type="button" class="nav ${S.view === v ? 'on' : ''} nv-${v}" data-a="go" data-v="${v}">${ico(VICON[v])}<span class="lb">${VIEWS[v][1]}</span>${n[v] ? `<span class="n ${v === 'chat' ? 'hot' : v === 'users' ? 'grn' : ''}">${n[v]}</span>` : ''}</button>`;
+  const cmp = `<a class="nav nv-cmp" href="/pengiriman/" title="Keberangkatan pengiriman produksi — CMP · AMP · SCP · PCP">${ico('jadwal')}<span class="lb">Keberangkatan Pengiriman</span></a>`;
+  const kart = `<button type="button" class="nav ${S.view === 'bc' && !S.bcr ? 'on' : ''}" data-a="bcGo" data-r="">${ico('home')}<span class="lb">${S.bc ? 'Ringkasan Basecamp' : 'Rekap Semua Basecamp'}</span></button>`
+    + KARTU.map(([k, t, i], x) => `<button type="button" class="nav ${S.view === 'bc' && S.bcr === k ? 'on' : ''}" data-a="bcGo" data-r="${k}">${ico(i)}<span class="lb">${esc(t)}</span><em>${String(x + 1).padStart(2, '0')}</em></button>`).join('');
+  const side = $('#side'), sn = $('.snav', side), st = sn ? sn.scrollTop : 0;
+  setHTML(side, `<a class="slogo" href="#" data-a="go" data-v="home"><span class="ahg-logo sl" role="img" aria-label="PT. Armada Hada Graha"></span><div><b>Virtual Work AHG</b><span>PT. Armada Hada Graha</span></div></a>${bcSelect()}
+    <nav class="snav"><div class="sgrp">Ruang Kerja</div>${items.map(v => (v === 'wait' ? cmp : '') + nav(v)).join('')}<div class="sgrp">Kartu Operasional</div>${kart}</nav>
+    <a class="shelp" target="_blank" rel="noopener" href="${esc(WA_HELP)}">${ico('wa')}<div><b>Bantuan Admin</b><span>+62 822-9977-4825</span></div></a>
+    <div class="side-f"><span class="sync"></span><span class="small">versi ${BUILD}</span></div>`);
+  const sn2 = $('.snav', side); if (sn2 && sn2 !== sn) sn2.scrollTop = st;
+  setHTML($('#bnav'), ['home', 'reminder', 'task', 'cash', 'unit', 'bc', 'users'].map(v => `<button type="button" class="${S.view === v || (v === 'unit' && S.view === 'proyeksi') ? 'on' : ''}" data-a="go" data-v="${v}"><span class="ic">${ico(VICON[v])}${n[v] && v !== 'users' ? `<i class="dot ${v === 'chat' ? 'hot' : ''}">${n[v] > 99 ? '99+' : n[v]}</i>` : ''}</span><span>${v === 'chat' ? 'Chat' : v === 'home' ? 'Home' : v === 'bc' ? 'Kartu' : VIEWS[v][1]}</span></button>`).join(''));
+  setHTML($('#me-btn'), `${av(S.me.name)}<span class="mn"><b>${esc(uname(S.me.name))}</b><small>${esc(ustatus(S.me.name) || (isAdmin() ? 'Administrator' : 'Pengguna'))}</small></span>${ico('down', 'caret')}`);
   renderBell();
   $('#tools-btn')?.classList.toggle('on', S.view === 'tools');
   const fab = $('#chat-fab');
   if (fab) { const on = S.view === 'chat'; setHTML(fab, `${on ? CLOSE_SVG : CHAT_SVG}${!on && b.chat ? `<i class="bdot fab-n">${b.chat > 999 ? '999+' : b.chat}</i>` : ''}`); fab.classList.toggle('on', on); fab.classList.toggle('has', !on && !!b.chat); fab.title = on ? 'Tutup chat' : b.chat ? `Global Chat · ${b.chat} pesan baru` : 'Global Chat'; }
-  findSync();
-  document.title = (b.chat ? `(${b.chat}) ` : '') + 'Virtual Work AHG';
+  findSync(); bcCrumb();
+  document.title = (b.chat ? `(${b.chat}) ` : '') + (S.view === 'bc' ? kartuTitle(S.bcr) + ' · ' + bcLabel() + ' · ' : '') + 'Virtual Work AHG';
 }
 function go(v) {
+  document.body.classList.remove('drawer');
   if (v === 'admin' && !isAdmin()) v = 'reminder';
   if (S.view === 'wait' && v !== 'wait' && W.saveT) gameFlush();
   if (v === 'chat' && S.view !== 'chat') S.chatBack = S.view;
@@ -3560,7 +3989,7 @@ function keep(root, fn) {
 }
 function renderMain() {
   const m = $('#main'); if (!m) return;
-  const html = ({ home: vHome, reminder: vReminder, chat: vChat, task: vTask, cash: vCash, unit: vUnit, proyeksi: vProyeksi, wait: vWait, tools: vTools, users: vUsersPage, admin: vAdmin }[S.view] || vReminder)();
+  const html = ({ home: vHome, reminder: vReminder, chat: vChat, task: vTask, cash: vCash, unit: vUnit, proyeksi: vProyeksi, wait: vWait, tools: vTools, users: vUsersPage, admin: vAdmin, bc: vKartu }[S.view] || vReminder)();
   const sameChat = S.view === 'chat' && m.dataset.view === 'chat' && m.dataset.conv === S.chat.conv && $('#composer', m);
   if (sameChat) { // keep the composer (typing, IME, file picker) — refresh only lists and header
     const tmp = document.createElement('div'); tmp.innerHTML = html;
@@ -3570,7 +3999,7 @@ function renderMain() {
     const sb = $('.send', m); sb.disabled = S.chat.sending; sb.textContent = S.chat.sending ? '⏳' : 'Kirim';
     return;
   }
-  if (m._h === html && m.dataset.view === S.view) return;
+  if (m._h === html && m.dataset.view === S.view) { if (S.view === 'bc') bcFrameSync(); return; }
   if (S.view === 'wait' && m.dataset.view === 'wait') { m._h = html; const t = document.createElement('div'); t.innerHTML = html; morph(m, t); return; } // game ticks every second
   m._h = html;
   keep(m, () => { m.innerHTML = html; m.dataset.view = S.view; m.dataset.conv = S.view === 'chat' ? S.chat.conv : ''; });
@@ -4220,7 +4649,7 @@ function reportPrint() {
 
 // ---------- UNIT (aktivitas unit basecamp) ----------
 const UNIT_CATS = { produksi: '🏗 Produksi', stok: '📦 Stock Material' };
-const BASECAMPS = ['Bugel-Klontong', 'Tempuran', 'Jogoresan'];
+const BASECAMPS = ['Bugel-Klontong', 'Tempuran', 'Jogoresan', 'Bawen'];
 const bcNorm = b => ({ Bugel: 'Bugel-Klontong' })[b] || b; // old entries saved as 'Bugel'
 const PROD_UNITS = { AMP: ['Asphalt Mixing Plant', 'ton'], CMP: ['Concrete Mixing Plant', 'm3'], PCP: ['Precast Plant', 'pcs'], SCP: ['Stone Crusher Plant', 'ton'] };
 const PCP_SIZES = ['U-Ditch (50x70x120 t.15)'];
@@ -4673,7 +5102,7 @@ async function viewFile(id, name, mime) {
 
 // ---------- actions ----------
 const A = {
-  ...GA, ...GA2, ...NA, ...FA, ...HA, ...LA, ...PJA,
+  ...GA, ...GA2, ...NA, ...FA, ...HA, ...LA, ...PJA, ...KA,
   pwShow() { const p = $('#l-pass'); p.type = p.type === 'password' ? 'text' : 'password'; },
   lMode(el) { const keep = { user: $('#l-user')?.value || '', pass: $('#l-pass')?.value || '' }; S.lmode = el.dataset.m; renderLogin(keep); },
   go: el => { if (dlg().open) closeAll(); go(el.dataset.v); },
@@ -4783,7 +5212,7 @@ const A = {
   admDel: async el => { const n = el.dataset.u; const r = await confirmDlg(`Hapus user <b>${esc(n)}</b>? Akun & sesi dihapus (nama bisa dipakai daftar lagi).`, 'Hapus user', true, `<label class="chk-l"><input type="checkbox" id="cf-purge"> Hapus juga semua data buatannya (reminder, task, cash, pesan)</label>`); if (r) adminAct('delete', n, $('#cf-purge')?.checked); }
 };
 const CH = { // change / input handlers
-  ...LCH, ...PJCH,
+  ...LCH, ...PJCH, ...KCH,
   remM: el => { S.rem.m = Number(el.value); S.rem.sel = ''; renderMain(); },
   remY: el => { S.rem.y = Number(el.value); S.rem.sel = ''; renderMain(); },
   remScope: el => { S.rem.scope = el.value; renderMain(); },
@@ -4964,7 +5393,7 @@ dlg().addEventListener('close', () => { S.dlg = null; dlg().className = ''; });
 
 // ---------- loops + boot ----------
 async function checkUpdate() { // phones keep old copies; load the newer build when nothing is being edited
-  if (dlg().open || S.queue.size || document.activeElement?.value) return;
+  if (dlg().open || S.queue.size || document.activeElement?.value || (S.view === 'bc' && bcBusy())) return;
   try {
     const r = await fetch(location.pathname + '?_=' + Date.now(), { cache: 'no-store' }); const m = /const BUILD = '([^']+)'/.exec(await r.text());
     if (m && m[1] !== BUILD && m[1] !== '__BUILD__' && SS.get('reloaded') !== m[1]) { SS.set('reloaded', m[1]); location.replace(location.pathname + '?v=' + m[1]); }
@@ -4982,7 +5411,7 @@ window.addEventListener('online', () => syncNow());
 window.addEventListener('focus', () => syncNow());
 
 function boot() {
-  applyTheme(); checkUpdate();
+  applyTheme(); checkUpdate(); ikonInit();
   let s = null; try { s = JSON.parse(LS.get('session') || SS.get('session') || 'null'); } catch {}
   if (s?.token && s?.name) {
     if (here() !== gPath(s.grp)) { location.replace(gPath(s.grp)); return; } // ahgproduksi.github.io → /unit atau /pengiriman sesuai referral
@@ -4999,7 +5428,7 @@ boot();
 const PR = {
   AC: new Set(('AHG AMP CMP PCP SCP TM JPG WIB WITA WIT PDF WA HP PT CV UD BH DT SO PO DO SJ SPK SPB BBM ID OK ATK APD K3 P3K PPN PPH NPWP NIK ' +
     'KTP SIM STNK BPKB URL QR RT RW CCTV GPS PLN PDAM AC TV USB HRD GM QC QA SOP BOM SDM PU DPU PUPR SNI ISO PIC HSE MEP SPBU KB MB GB TB ' +
-    'UMKM BUMN CSR KPI SKU NB PS JL').split(' ')),
+    'UMKM BUMN CSR KPI SKU NB PS JL BPPB HPP BUASO WO').split(' ')),
   UNIT: new Set(['cm', 'mm', 'km', 'kg', 'mg', 'ml', 'm2', 'm3', 'm²', 'm³', 'cm2', 'cm3', 'mm2']),
   KT: new Set(('di ke dari dan yang untuk pada dengan atau oleh bagi dalam tentang sebagai serta tetapi agar karena jika kalau maka per ' +
     'yg dgn utk dr dlm thd terhadap kepada akan the of and to in on at for a an').split(' ')),
