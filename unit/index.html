@@ -3366,6 +3366,7 @@ function pjxHtml() {
 /* Ikon garis gaya Basecamp Bawen (tanpa emoji) — set ikon sama dengan deploy-ahgbawen/js/core.js + tambahan ruang kerja.
    ikonInit(): emoji pada tombol/judul/menu ditampilkan sebagai ikon garis (hanya tampilan; data & teks tersimpan tidak berubah). */
 const IK = {
+  proj: '<rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M3.5 8.5h17"/><path d="M8 12.5h3M8 16h3"/><path d="M14 16l1.5-3 1.5 1.5 1.5-3"/>',
   stok: '<path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"/><path d="m3 8 9 5 9-5"/><path d="M12 13v8"/><path d="m7.5 5.5 9 5"/>',
   prod: '<path d="M3 21V10l5 3V10l5 3V10l5 3V4h3v17H3Z"/><path d="M7 17h2M12 17h2M17 17h1"/>',
   jual: '<path d="M4 3h16v18l-3-2-2 2-3-2-3 2-2-2-3 2V3Z"/><path d="M8 8h8M8 12h8M8 16h5"/>',
@@ -3494,10 +3495,10 @@ function ikonInit() {
     .observe(document.body, { childList: true, subtree: true, characterData: true });
 }
 
-// Kartu Operasional per basecamp (15 kartu Basecamp Bawen) + pilihan basecamp global.
+// Kartu Operasional per basecamp (16 kartu Basecamp Bawen) + pilihan basecamp global.
 // Kartu tampil di <iframe> /bc/?bc=<basecamp>#/<kartu> (kode modul situs ahgbawen, data lewat fungsi bc_* dengan sesi Virtual Work).
 // 'Bawen' = data live ahgbawen.github.io; basecamp lain = data sendiri; '' (Semua Basecamp) = rekap semua basecamp.
-const KARTU = [['stok', 'Stok Material', 'stok'], ['prod', 'Produksi', 'prod'], ['jual', 'Penjualan', 'jual'], ['kas', 'Cash Flow Unit', 'kas'], ['cust', 'Customer Unit', 'cust'],
+const KARTU = [['stok', 'Stok Material', 'stok'], ['prod', 'Produksi', 'prod'], ['jual', 'Penjualan', 'jual'], ['proj', 'Kartu Project', 'proj'], ['kas', 'Cash Flow Unit', 'kas'], ['cust', 'Customer Unit', 'cust'],
   ['jadwal', 'Jadwal Pengiriman', 'jadwal'], ['bahan', 'Bahan & Supplier', 'bahan'], ['mt', 'Maintenance Alat', 'mt'], ['bppb', 'BPPB', 'bppb'], ['mp', 'Man Power', 'mp'],
   ['mkt', 'Marketing', 'mkt'], ['dev', 'Pengembangan Basecamp', 'dev'], ['pl', 'Price List', 'tag'], ['hpp', 'HPP & BUASO', 'scale'], ['org', 'Struktur Organisasi', 'org']];
 const VICON = { home: 'grid', reminder: 'alarm', chat: 'chat', task: 'task', cash: 'kas', unit: 'prod', proyeksi: 'cal', wait: 'game', tools: 'tools', users: 'users', admin: 'crown', bc: 'basecamp' };
@@ -3578,7 +3579,7 @@ const KCH = {
 };
 
 // Virtual Work AHG — reminder, global chat (+ whisper), task (+ rutin mingguan) dan kasbon tim. Data di Supabase (proyek ahg-produksi), sinkron real time.
-const BUILD = '20261123-192249';
+const BUILD = '20261123-201618';
 const SB_URL = 'https://herltzublcqpbgyxbbyp.supabase.co', SB_KEY = 'sb_publishable_FMSC0iqDRLsRXtvTtZX0Ow_piPi5bli'; // public key; tables closed, only ahg_* functions
 // File → Google Drive yulius.krisnawan (folder "AHG Produksi", 5 GiB) lewat Edge Function ahg-file: cek login, buka sesi upload Drive
 // (browser kirim byte langsung ke Google), unduh diproksikan per 8 MiB. Cadangan saat Drive terputus: Supabase Storage (bucket ahg-files).

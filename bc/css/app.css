@@ -519,3 +519,16 @@ table.sheetlike td.wrap { min-width: 160px; }
 .ts td { padding: 7px 10px; }
 .ts tbody tr:not(.tsu):not(.tsp) td:nth-child(3) { white-space: normal; min-width: 96px; max-width: 130px; }
 @media (max-width: 640px) { .ts td.tsn { min-width: 130px; max-width: 150px; } .ts th.tlh, .ts td.tl { width: calc(var(--n) * 24px); min-width: calc(var(--n) * 24px); } }
+
+/* ---------- Kartu Project ---------- */
+.ptile.sm { width: 34px; height: 34px; border-radius: 9px; box-shadow: none; } .ptile.sm .ic { width: 18px; height: 18px; }
+.pjcard .chead > div:first-child > div { display: block; }
+.pjbar { display: flex; align-items: center; gap: 8px; min-width: 130px; } .pjbar .pbar { flex: 1; margin: 0; } .pjbar span { font-size: 12px; font-weight: 600; color: var(--ink2); min-width: 46px; text-align: right; }
+.pjtitle { margin: 16px 0 10px; padding: 12px 14px; border-radius: 10px; background: var(--navy); color: #fff; text-align: center; } .pjtitle b { display: block; font-size: 14px; letter-spacing: .02em; } .pjtitle span { font-size: 12.5px; opacity: .85; }
+.pjk { margin-bottom: 14px; }
+.pjkh { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 2px 10px; margin-bottom: 6px; } .pjkh b { font-size: 13.5px; color: var(--navy); } .pjkh span { font-size: 12px; color: var(--muted); text-align: right; } .pjkh .pbar { grid-column: 1 / -1; margin: 2px 0 0; }
+.pjk td.pjket { background: #fbfcfe; border-left: 1px solid #edf1f5; color: var(--ink2); font-size: 12.5px; vertical-align: top; }
+.pjk td.pjket span { position: sticky; top: 46px; display: block; }
+.pjk .tbl:not(.pjsum) { max-height: 440px; overflow: auto; }
+.pjsum { margin-top: 6px; } .pjsum td { font-weight: 600; padding: 8px 12px; } .pjsum td:first-child { width: 34%; } .pjsum tr:not(.grand) td { background: #f3f6fa; }
+.empty .btn { margin-top: 14px; } .empty .btn .ic { width: 18px; height: 18px; margin: 0; }
