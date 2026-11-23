@@ -45,28 +45,66 @@
       };
     });
   }
+  /* BPPB belum rilis diklasifikasikan per basecamp (lokasi sheet + unit) */
+  function bppbAllData() {
+    return R0.bcs.map(bc => {
+      const m = R0.data[bc];
+      if (!m) return { bc, load: true };
+      return withDocs(m, () => {
+        const bs = all('bppb').filter(b => b.rilis === 'Belum rilis');
+        const it = []; bs.forEach(b => (b.items || []).forEach(i => it.push(Object.assign({ b, st: itemSt(i) }, i))));
+        const loks = [...new Set(bs.map(b => b.lokasi || 'BC ' + bc))].sort();
+        return {
+          bc, n: bs.length, items: it.length, loks: loks.map(l => ({ l, n: bs.filter(b => (b.lokasi || 'BC ' + bc) === l).length })),
+          unit: UNITS.concat('Umum').map(u => [u, bs.filter(b => b.unit === u).length]).filter(x => x[1]),
+          noPo: it.filter(i => i.st === 'Belum ter PO').length, po: it.filter(i => i.st === 'Sudah PO, belum terbayar' || i.st === 'Datang, belum terbayar').length,
+          rilis: it.filter(i => i.st === 'Sudah rilis').length, nilai: sum(it, i => (+i.qty || 1) * (+i.harga || 0)),
+          top: byDateDesc(bs).slice(0, 5)
+        };
+      }) || { bc, load: true };
+    });
+  }
+  function bppbAll() {
+    const d = bppbAllData(), ok = d.filter(x => !x.load), T = k => sum(ok, x => x[k]);
+    const cols = [
+      { t: 'Basecamp', f: x => '<span class="bcbadge sm" style="--bct:' + bcTone(x.bc) + '">' + esc(x.bc) + '</span>', raw: true },
+      { t: 'Lokasi sheet', f: x => x.load ? 'Memuat…' : x.loks.map(l => esc(l.l) + ' <small class="muted">(' + l.n + ')</small>').join('<br>') || '-', raw: true },
+      { t: 'Unit', f: x => x.load ? '' : '<span class="bcx-u">' + x.unit.map(([u, n]) => '<span>' + unitChip(u) + '<small>' + n + '</small></span>').join('') + '</span>' || '-', raw: true },
+      { t: 'BPPB belum rilis', f: x => x.load ? '' : num(x.n), num: true }, { t: 'Item', f: x => x.load ? '' : num(x.items), num: true },
+      { t: 'Belum ter PO', f: x => x.load ? '' : '<b class="' + (x.noPo ? 't-bad' : '') + '">' + num(x.noPo) + '</b>', num: true, raw: true },
+      { t: 'Sudah PO', f: x => x.load ? '' : num(x.po), num: true }, { t: 'Sudah rilis', f: x => x.load ? '' : num(x.rilis), num: true },
+      { t: 'Estimasi nilai', f: x => x.load ? '' : rpS(x.nilai), num: true },
+      { t: '', f: x => '<button class="btn sm" data-pick="' + esc(x.bc) + '">Buka' + ic('right') + '</button>', raw: true }
+    ];
+    return '<div class="sech"><h2>Klasifikasi BPPB per Basecamp</h2><p>Baris sheet "List permintaan BPPB belum dirilis" dibagi ke basecamp masing-masing: BC Bugel &amp; BC Klontong → Bugel-Klontong, BC Bawen → Bawen, BC Tempuran → Tempuran, BC Jogoresan → Jogoresan. Total ' + num(T('n')) + ' BPPB · ' + num(T('items')) + ' item · ' + rpS(T('nilai')) + '.</p></div>' +
+      '<section class="card flush">' + table(cols, d.map((x, i) => Object.assign({ id: i }, x))) + '</section>' +
+      ok.filter(x => x.n).map(x => '<section class="card"><div class="chead"><h3 class="bcx-h"><span class="bcbadge sm" style="--bct:' + bcTone(x.bc) + '">' + esc(x.bc) + '</span> BPPB terbaru</h3><button class="btn sm ghost" data-pick="' + esc(x.bc) + '">Semua ' + num(x.n) + ' BPPB' + ic('right') + '</button></div>' +
+        table([{ t: 'No. BPPB', f: b => '<b>' + esc(b.no) + '</b><small>' + tgl(b.tgl) + '</small>', raw: true }, { t: 'Lokasi', f: b => b.lokasi || '-' }, { t: 'Unit', f: b => unitChip(b.unit), raw: true },
+          { t: 'Rincian', f: b => esc((b.items || []).map(i => i.nama).filter(Boolean).slice(0, 3).join(', ') + ((b.items || []).length > 3 ? ' +' + ((b.items || []).length - 3) + ' item' : '')), raw: true, cls: 'wrap' },
+          { t: 'Item', f: b => (b.items || []).length, num: true }], x.top) + '</section>').join('');
+  }
   const sumOf = (bc, k) => R0.data[bc] ? withDocs(R0.data[bc], () => MODS[k].summary()) : null;
   const pick = (bc, r) => { if (P && P.pick) P.pick(bc, r); };
   function draw() {
     const main = $('#main'); if (!main) return;
     const r = APP.route, mod = MODS[r];
-    const bcs = R0.bcs;
+    const bcs = R0.bcs; let html;
     const head = '<div class="phead"><div class="ptitle"><span class="ptile">' + ic(mod ? mod.icon : 'home') + '</span><div><h1>' + esc(mod ? mod.title : 'Rekap Semua Basecamp') + '</h1><p>' +
       esc(mod ? 'Ringkasan kartu ini di setiap basecamp. Pilih basecamp untuk membuka dan mengisi data.' : 'Ringkasan operasional seluruh basecamp PT. Armada Hada Graha — unit AMP, CMP, SCP, dan PCP.') + '</p></div></div>' +
       '<div class="pact"><button class="btn ghost" data-rf>' + ic('refresh') + '<span>Muat ulang</span></button>' + (mod ? '' : '<button class="btn dark" data-pdf>' + ic('print') + '<span>Cetak PDF</span></button>') + '</div></div>';
-    if (!bcs.length) { main.innerHTML = head + '<div class="empty">' + ic('home') + '<p>Belum ada basecamp.</p></div>'; bind(main); return; }
+    if (!bcs.length) { html = head + '<div class="empty">' + ic('home') + '<p>Belum ada basecamp.</p></div>'; put(main, html); return; }
     if (mod) {
-      main.innerHTML = head + (R0.err ? '<div class="note">' + esc(R0.err) + '</div>' : '') + '<div class="cards">' + bcs.map((bc, i) => {
+      html = head + (R0.err ? '<div class="note">' + esc(R0.err) + '</div>' : '') + '<div class="cards">' + bcs.map((bc, i) => {
         const s = sumOf(bc, r) || {};
-        return '<a class="mcard" href="#" data-pick="' + esc(bc) + '" style="--d:' + (i * 35) + 'ms"><div class="mtop"><span class="mic">' + ic('home') + '</span><em>' + String(i + 1).padStart(2, '0') + '</em></div><h3>Basecamp ' + esc(bc) + '</h3><p>' + esc(mod.title) + '</p>' +
+        return '<a class="mcard" href="#" data-pick="' + esc(bc) + '" style="--d:' + (i * 35) + 'ms;--bct:' + bcTone(bc) + '"><div class="mtop"><span class="mic">' + ic('home') + '</span><em>' + String(i + 1).padStart(2, '0') + '</em></div><h3>Basecamp ' + esc(bc) + '</h3><p>' + esc(mod.title) + '</p>' +
           '<div class="mstat ' + (s.tone || '') + '"><b>' + esc(R0.data[bc] ? s.main || '' : 'Memuat…') + '</b><span>' + esc(s.sub || '') + '</span></div><span class="mgo">Buka kartu' + ic('right') + '</span></a>';
-      }).join('') + '</div>';
-      bind(main); return;
+      }).join('') + '</div>' + (r === 'bppb' ? bppbAll() : '');
+      put(main, html); return;
     }
     const st = bcs.map(bc => [bc, statsOf(bc)]);
     const tot = k => sum(st, ([, s]) => s ? s[k] : 0);
     const cols = [
-      { t: 'Basecamp', f: ([bc]) => '<b>' + esc(bc) + '</b>', raw: true },
+      { t: 'Basecamp', f: ([bc]) => '<span class="bcbadge sm" style="--bct:' + bcTone(bc) + '">' + esc(bc) + '</span>', raw: true },
       { t: 'Penjualan bulan ini', f: ([, s]) => s ? rpS(s.jual) : '…', num: true }, { t: 'Profit', f: ([, s]) => s ? rpS(s.profit) : '', num: true },
       { t: 'SO / WO', f: ([, s]) => s ? s.so + ' · ' + rpS(s.soNilai) : '', num: true }, { t: 'Saldo kas', f: ([, s]) => s ? rpS(s.saldo) : '', num: true },
       { t: 'Piutang', f: ([, s]) => s ? rpS(s.piutang) + (s.telat ? ' <small class="t-bad">' + s.telat + ' telat</small>' : '') : '', num: true, raw: true },
@@ -76,17 +114,19 @@
       { t: '', f: ([bc]) => '<button class="btn sm" data-pick="' + esc(bc) + '">Buka' + ic('right') + '</button>', raw: true }
     ];
     const h = new Date().getHours(), salam = h < 11 ? 'Selamat pagi' : h < 15 ? 'Selamat siang' : h < 18 ? 'Selamat sore' : 'Selamat malam';
-    main.innerHTML =
+    html =
       '<section class="hero"><div><p class="hk">' + esc(HARI[new Date().getDay()] + ', ' + tgl(today(), true)) + '</p><h1>' + salam + ', ' + esc(String(S.user.name).split(' ')[0]) + '</h1><p>Rekap ' + bcs.length + ' basecamp: ' + esc(bcs.join(', ')) + '.</p></div>' +
       '<div class="hstats">' + kpi('Penjualan bulan ini', rpS(tot('jual')), 'profit ' + rpS(tot('profit'))) + kpi('SO / WO bulan ini', tot('so'), 'nilai ' + rpS(tot('soNilai'))) + kpi('Saldo kas', rpS(tot('saldo'))) + kpi('Piutang', rpS(tot('piutang')), tot('telat') ? tot('telat') + ' lewat jatuh tempo' : 'terkendali', tot('telat') ? 'bad' : '') + '</div></section>' +
       (R0.err ? '<div class="note" style="margin-top:14px">' + esc(R0.err) + '</div>' : '') +
       '<div class="sech"><h2>Per Basecamp</h2><p>Angka dihitung dari Kartu Operasional masing-masing basecamp' + (R0.busy ? ' — memuat data…' : '') + '.</p></div>' +
       '<section class="card flush">' + table(cols, st) + '</section>' +
       '<div class="sech"><h2>Buka Basecamp</h2><p>Pilih basecamp untuk mengelola 15 kartu operasionalnya.</p></div>' +
-      '<div class="cards">' + st.map(([bc, s], i) => '<a class="mcard" href="#" data-pick="' + esc(bc) + '" style="--d:' + (i * 35) + 'ms"><div class="mtop"><span class="mic">' + ic('home') + '</span><em>' + String(i + 1).padStart(2, '0') + '</em></div><h3>Basecamp ' + esc(bc) + '</h3><p>' + (s ? s.docs + ' catatan · ' + s.mp + ' man power aktif' : 'Memuat…') + '</p>' +
+      '<div class="cards">' + st.map(([bc, s], i) => '<a class="mcard" href="#" data-pick="' + esc(bc) + '" style="--d:' + (i * 35) + 'ms;--bct:' + bcTone(bc) + '"><div class="mtop"><span class="mic">' + ic('home') + '</span><em>' + String(i + 1).padStart(2, '0') + '</em></div><h3>Basecamp ' + esc(bc) + '</h3><p>' + (s ? s.docs + ' catatan · ' + s.mp + ' man power aktif' : 'Memuat…') + '</p>' +
         '<div class="mstat ' + (s && s.telat ? 'warn' : '') + '"><b>' + (s ? 'Saldo ' + rpS(s.saldo) : '') + '</b><span>' + (s ? 'Penjualan ' + rpS(s.jual) + ' bulan ini' : '') + '</span></div><span class="mgo">Buka basecamp' + ic('right') + '</span></a>').join('') + '</div>';
-    bind(main);
+    put(main, html);
   }
+  // gambar ulang hanya bila isi berubah (tanpa animasi berulang / posisi gulir melompat saat data basecamp masuk)
+  function put(main, html) { if (main._h === html && main.firstChild) return; main._h = html; main.innerHTML = html; bind(main); }
   function bind(main) {
     $$('[data-pick]', main).forEach(b => b.onclick = e => { e.preventDefault(); pick(b.dataset.pick, APP.route); });
     const rf = $('[data-rf]', main); if (rf) rf.onclick = () => loadAll(true);

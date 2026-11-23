@@ -218,7 +218,7 @@ function soForm(d, pre) {
       { k: 'unit', label: 'Unit produksi', type: 'seg', opts: UNITS, onChange: x => { x.produk = ''; x.harga = ''; } },
       { k: 'jenis', label: 'Jenis penjualan', type: 'seg', opts: [{ v: 'internal', t: 'Internal PT. AHG' }, { v: 'eksternal', t: 'Eksternal / Retail' }], onChange: x => { if (x.jenis === 'internal') x.cust = CUST_AHG.id; else if (x.cust === CUST_AHG.id) x.cust = ''; x.harga = priceFor(x) || x.harga; } },
       { k: 'cust', label: 'Customer', type: 'select', opts: x => custList().filter(c => x.jenis === 'internal' ? c.jenis === 'Internal' : true).map(c => ({ v: c.id, t: c.nama })), req: true, add: { label: 'Tambah customer baru…', fn: x => addCustomerDialog(x.jenis === 'internal' ? 'Internal' : 'Eksternal') } },
-      { k: 'proyek', label: 'Nama proyek / lokasi kirim', req: true, ph: 'mis. Peningkatan Jalan Bawen–Ambarawa' },
+      { k: 'proyek', label: 'Nama proyek / lokasi kirim', req: true, ph: 'mis. Peningkatan Jalan ' + BCN + ' – ...' },
       { k: 'ref', label: 'No. PO / WO customer', ph: 'opsional' },
       { k: 'produk', label: 'Produk', type: 'select', req: true, opts: x => products(x.unit).map(p => ({ v: p.n, t: p.n + ' (' + p.s + ')' })), onChange: x => { x.harga = priceFor(x); } },
       { k: 'vol', label: 'Volume', type: 'num', req: true, suffix: x => { const c = calc(x); return c ? c.sat : '-'; } },

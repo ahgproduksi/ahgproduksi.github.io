@@ -157,7 +157,7 @@ function programHtml(s) {
 }
 async function programReport(s) {
   const ps = programs(s);
-  const R = await pdfReport({ title: 'Program Perbaikan ' + BC, sub: (s.unit ? UNIT_NAME[s.unit] : 'AMP, CMP, SCP') + ' · per ' + tgl(today(), true), orient: 'l', fname: 'Program_Perbaikan_Bawen' });
+  const R = await pdfReport({ title: 'Program Perbaikan ' + BC, sub: (s.unit ? UNIT_NAME[s.unit] : 'AMP, CMP, SCP') + ' · per ' + tgl(today(), true), orient: 'l', fname: 'Program_Perbaikan_' + BCN.replace(/[^A-Za-z0-9]+/g, '_') });
   R.kv([['Program', String(ps.length)], ['Total RAB material', 'Rp ' + R_(sum(ps, 'rab'))], ['Pekerjaan selesai', sum(ps, 'selesai') + ' / ' + sum(ps, p => p.kerja.length)], ['Item belum ter PO', String(sum(ps, p => p.mats.filter(i => i.st === 'Belum ter PO').length)), 'red']]);
   R.h2('Rekap Anggaran');
   R.table(['No', 'Program Perbaikan', 'Unit', 'Item Material', 'Pekerjaan', 'Nilai RAB'], ps.map((p, i) => [i + 1, p.nama, p.unit, cellR(String(p.mats.length)), cellR(String(p.kerja.length)), cellR(R_(p.rab))]), { foot: ['', 'Total', '', '', '', cellR(R_(sum(ps, 'rab')))] });
@@ -318,7 +318,7 @@ async function mtReport(s) {
 MODS.bppb = {
   title: 'BPPB', icon: 'bppb', desc: 'Bukti Permintaan & Pengeluaran Barang — monitoring realisasi permintaan',
   render(root) {
-    const st = stateOf('bppb', { unit: '', q: '', month: '', status: '' });
+    const st = stateOf('bppb', { unit: '', q: '', month: '', status: '', lok: '' });
     st.umum = true;
     st.tab = st.tab || 'rilis';
     return page(root, {
@@ -326,7 +326,7 @@ MODS.bppb = {
       tabs: [{ k: 'rilis', t: 'BPPB Belum Rilis' }, { k: 'semua', t: 'Monitoring Realisasi' }],
       actions: [{ id: 'add', t: 'BPPB Baru', pri: true }, { id: 'sync', t: 'Sinkron Sheet BPPB', icon: 'refresh' }],
       on: { add: () => bppbForm(), sync: () => bppbSheetSync(true) },
-      filter: s => periodBar(s, 'bppb', '<select data-fk="status"><option value="">Semua status</option>' + ['Belum terealisasi', 'Sebagian', 'Terealisasi'].map(x => '<option' + (s.status === x ? ' selected' : '') + '>' + x + '</option>').join('') + '</select>'),
+      filter: s => periodBar(s, 'bppb', bppbLokSel(s) + '<select data-fk="status"><option value="">Semua status</option>' + ['Belum terealisasi', 'Sebagian', 'Terealisasi'].map(x => '<option' + (s.status === x ? ' selected' : '') + '>' + x + '</option>').join('') + '</select>'),
       body: s => {
         if (s.tab === 'rilis') return rilisHtml(s);
         const rows = bppbRows(s);
@@ -343,19 +343,32 @@ MODS.bppb = {
       bind: el => $$('[data-row]', el).forEach(tr => tr.onclick = () => bppbDetail(tr.dataset.row.split(':')[0]))
     });
   },
-  summary() { const r = all('bppb').filter(b => b.rilis === 'Belum rilis'); if (r.length) return { main: r.length + ' BPPB belum rilis', sub: sum(r, b => (b.items || []).filter(i => !i.po).length) + ' item belum ter-PO', tone: 'warn' }; const a = all('bppb').map(b => bppbStat(b)); const o = a.filter(b => b.st !== 'Terealisasi').length; return { main: o + ' BPPB belum tuntas', sub: a.length + ' BPPB tercatat', tone: o ? 'warn' : '' }; }
+  summary() { const r = all('bppb').filter(b => b.rilis === 'Belum rilis'); if (r.length) return { main: r.length + ' BPPB belum rilis', sub: sum(r, b => (b.items || []).filter(i => itemSt(i) === 'Belum ter PO').length) + ' item belum ter-PO', tone: 'warn' }; const a = all('bppb').map(b => bppbStat(b)); const o = a.filter(b => b.st !== 'Terealisasi').length; return { main: o + ' BPPB belum tuntas', sub: a.length + ' BPPB tercatat', tone: o ? 'warn' : '' }; }
 };
 const BPPB_SHEET = 'https://docs.google.com/spreadsheets/d/1BOFBQ5NQp1PwQY3wEnE3BJkVSBWd_s6AnRNBdPQL0ls';
 const DIV_UNIT = d => /asphalt/i.test(d) ? 'AMP' : /concrete/i.test(d) ? 'CMP' : /stone/i.test(d) ? 'SCP' : /precast/i.test(d) ? 'PCP' : 'Umum';
+// baris sheet → basecamp: "BC Bugel" & "BC Klontong" = Bugel-Klontong, "BC Bawen" = Bawen, dst. (kata nama basecamp)
+const BC_KEYS = BCN.toLowerCase().split(/[^a-z0-9]+/).filter(w => w && w !== 'bc' && w !== 'basecamp');
+const bppbLok = v => String(v || '').trim().replace(/^bc\s+/i, '').toLowerCase();
+const bppbMine = v => { const l = bppbLok(v); return !!l && BC_KEYS.some(w => l === w || l.split(/[^a-z0-9]+/).includes(w)); };
+const BPPB_URG = /^(-|penting|sangat penting|primer|urgent|mendesak)$/i;
+// ket item = "urgensi · keterangan" (format lama situs Bawen); dipisah untuk tampilan
+function bppbKet(i) { const p = String(i.ket || '').split(' · '); const urg = p.length > 1 && BPPB_URG.test(p[0].trim()) ? p.shift().trim() : BPPB_URG.test(p[0].trim()) && p.length === 1 ? p.shift().trim() : ''; return { urg: urg === '-' ? '' : urg, ket: p.join(' · ').trim() }; }
+const bppbNama = i => i.nama || '(rincian belum diisi di sheet)';
+const urgChip = u => u ? chip(u, /sangat/i.test(u) ? 'bad' : 'warn') + ' ' : '';
 function itemSt(i) {
   const k = String(i.ket || '').toLowerCase();
+  if (/(^| · )rilis$/.test(k)) return 'Sudah rilis';
   if (+i.qty && (+i.real || 0) >= +i.qty && !/belum terbayar/.test(k)) return 'Diterima';
   if (/datang/.test(k)) return 'Datang, belum terbayar';
   if (i.po) return 'Sudah PO, belum terbayar';
   return 'Belum ter PO';
 }
-const itemTone = t => ({ 'Diterima': 'ok', 'Datang, belum terbayar': 'info', 'Sudah PO, belum terbayar': 'warn', 'Belum ter PO': 'bad' }[t]);
-function rilisRows(s) { return byDateDesc(all('bppb').filter(b => b.rilis === 'Belum rilis' && (!s.unit || b.unit === s.unit) && inMonth(b.tgl, s.month) && qMatch(s.q, b.no, b.ket, (b.items || []).map(i => i.nama + ' ' + (i.po || '')).join(' ')))).reverse(); }
+const itemTone = t => ({ 'Sudah rilis': 'ok', 'Diterima': 'ok', 'Datang, belum terbayar': 'info', 'Sudah PO, belum terbayar': 'warn', 'Belum ter PO': 'bad' }[t]);
+// lokasi sheet (mis. BC Bugel / BC Klontong di Basecamp Bugel-Klontong) — pilihan muncul bila lebih dari satu
+function bppbLoks() { return [...new Set(all('bppb').map(b => b.lokasi).filter(Boolean).concat(BC_KEYS.length > 1 ? BC_KEYS.map(w => 'BC ' + w[0].toUpperCase() + w.slice(1)) : []))].sort(); }
+function bppbLokSel(s) { const l = bppbLoks(); if (l.length < 2 && !s.lok) return ''; return '<select data-fk="lok"><option value="">Semua lokasi</option>' + l.map(x => '<option' + (s.lok === x ? ' selected' : '') + '>' + esc(x) + '</option>').join('') + '</select>'; }
+function rilisRows(s) { return byDateDesc(all('bppb').filter(b => b.rilis === 'Belum rilis' && (!s.unit || b.unit === s.unit) && (!s.lok || b.lokasi === s.lok) && inMonth(b.tgl, s.month) && qMatch(s.q, b.no, b.ket, (b.items || []).map(i => i.nama + ' ' + (i.po || '')).join(' ')))).reverse(); }
 function rilisHtml(s) {
   const rows = rilisRows(s);
   const items = []; rows.forEach(b => (b.items || []).forEach((i, k) => items.push(Object.assign({ b, k, st: itemSt(i) }, i))));
@@ -364,9 +377,9 @@ function rilisHtml(s) {
   const last = lsGet(LSP + 'bppbSync', null);
   let n = 0;
   return '<div class="kpis">' + kpi('BPPB belum rilis', rows.length, items.length + ' item') + kpi('Belum ter PO', cnt('Belum ter PO'), '', 'bad') + kpi('Sudah PO, belum terbayar', cnt('Sudah PO, belum terbayar') + cnt('Datang, belum terbayar'), cnt('Datang, belum terbayar') + ' barang sudah datang', 'warn') + kpi('Estimasi nilai permintaan', rpS(nilai), 'harga PO / RAB') + '</div>' +
-    '<div class="note">Sumber: sheet "List permintaan BPPB belum dirilis", hanya baris BC ' + esc(BCN) + '. ' + (last ? 'Sinkron terakhir ' + tglJam(last) + '. ' : '') + 'Tombol <b>Sinkron Sheet BPPB</b> mengambil data terbaru; realisasi yang dicatat di aplikasi tidak tertimpa.</div>' +
+    '<div class="note">Sumber: sheet "List permintaan BPPB belum dirilis", hanya baris ' + esc(bppbLoks().join(', ') || 'BC ' + BCN) + ' (' + esc(BC) + '). ' + (last ? 'Sinkron terakhir ' + tglJam(last) + '. ' : '') + 'Tombol <b>Sinkron Sheet BPPB</b> mengambil data terbaru; realisasi yang dicatat di aplikasi tidak tertimpa.</div>' +
     '<section class="card"><div class="tbl"><table class="sheetlike"><thead><tr><th>No</th><th>Divisi</th><th>No BPPB</th><th>Tanggal</th><th>Rincian Permintaan Material</th><th>Qty</th><th>No PO</th><th class="n">Harga</th><th>Supplier</th><th>Status Pengadaan</th><th>Keterangan</th></tr></thead><tbody>' +
-    (rows.length ? rows.map(b => (b.items || []).map((i, k) => '<tr class="click" data-row="' + esc(b.id) + ':' + k + '"' + (k === 0 ? ' style="border-top:2px solid var(--line2)"' : '') + '><td class="c">' + (++n) + '</td><td>' + (k === 0 ? unitChip(b.unit) + ' <small class="muted">' + esc(b.divisi || UNIT_NAME[b.unit] || '') + '</small>' : '') + '</td><td class="strong">' + (k === 0 ? esc(b.no) : '') + '</td><td>' + (k === 0 ? tgl(b.tgl) : '') + '</td><td>' + esc(i.nama) + '</td><td class="n">' + (i.qty ? num(i.qty) + ' ' + esc(i.sat || '') : '-') + '</td><td>' + esc(i.po || '-') + '</td><td class="n">' + (i.harga ? rp((+i.qty || 1) * i.harga) : '-') + '</td><td>' + esc(i.supp || '-') + '</td><td>' + chip(itemSt(i), itemTone(itemSt(i))) + '</td><td class="wrap muted">' + esc(i.ket || '') + '</td></tr>').join('')).join('') : '<tr><td colspan="11"><div class="empty">' + ic('bppb') + '<p>Belum ada data BPPB belum rilis. Tekan <b>Sinkron Sheet BPPB</b>.</p></div></td></tr>') +
+    (rows.length ? rows.map(b => (b.items || []).map((i, k) => '<tr class="click" data-row="' + esc(b.id) + ':' + k + '"' + (k === 0 ? ' style="border-top:2px solid var(--line2)"' : '') + '><td class="c">' + (++n) + '</td><td>' + (k === 0 ? unitChip(b.unit) + ' <small class="muted">' + esc(b.divisi || UNIT_NAME[b.unit] || '') + '</small>' + (b.lokasi ? '<small class="muted" style="display:block">' + esc(b.lokasi) + '</small>' : '') : '') + '</td><td class="strong">' + (k === 0 ? esc(b.no) : '') + '</td><td>' + (k === 0 ? tgl(b.tgl) : '') + '</td><td' + (i.nama ? '' : ' class="muted"') + '>' + esc(bppbNama(i)) + '</td><td class="n">' + (i.qty ? num(i.qty) + ' ' + esc(i.sat || '') : '-') + '</td><td>' + esc(i.po || '-') + '</td><td class="n">' + (i.harga ? rp((+i.qty || 1) * i.harga) : '-') + '</td><td>' + esc(i.supp || '-') + '</td><td>' + chip(itemSt(i), itemTone(itemSt(i))) + '</td><td class="wrap muted">' + urgChip(bppbKet(i).urg) + esc(bppbKet(i).ket) + '</td></tr>').join('')).join('') : '<tr><td colspan="11"><div class="empty">' + ic('bppb') + '<p>Belum ada data BPPB belum rilis. Tekan <b>Sinkron Sheet BPPB</b>.</p></div></td></tr>') +
     '</tbody></table></div></section>';
 }
 function parseCSV(t) {
@@ -379,29 +392,31 @@ function parseCSV(t) {
   if (cur || row.length) { row.push(cur); rows.push(row); }
   return rows;
 }
+// JSON dengan urutan kunci tetap (server jsonb mengurutkan ulang kunci) → hanya simpan bila isinya benar-benar berubah
+const stableJ = v => JSON.stringify(v, (k, x) => x && typeof x === 'object' && !Array.isArray(x) ? Object.keys(x).sort().reduce((o, q) => (o[q] = x[q], o), {}) : typeof x === 'number' ? +x.toFixed(6) : x);
 async function bppbSheetSync(manual) {
   try {
     const r = await fetch(BPPB_SHEET + '/gviz/tq?tqx=out:csv&sheet=BPPB&_=' + Date.now());
     if (!r.ok) throw new Error('HTTP ' + r.status);
-    const rows = parseCSV(await r.text()).filter(x => String(x[3] || '').toLowerCase().includes(BCN.toLowerCase().split(/[- ]/)[0]) && (x[4] || '').trim());
+    const rows = parseCSV(await r.text()).filter(x => bppbMine(x[3]) && (x[4] || '').trim());
     const grp = new Map();
     rows.forEach(x => { const no = x[4].trim(); if (!grp.has(no)) grp.set(no, []); grp.get(no).push(x); });
     let add = 0, upd = 0;
     grp.forEach((list, no) => {
       const id = 'bpq' + no.replace(/[^A-Za-z0-9]/g, '');
       const old = get(id);
-      const [dd, mm, yy] = (list[0][5] || '').split(/[-\/]/);
+      const [dd, mm, yy] = ((list.find(x => (x[5] || '').trim()) || list[0])[5] || '').trim().split(/[-\/]/);
       const items = list.map(x => {
         const nama = x[6].trim(), prev = old && (old.items || []).find(i => i.nama.toLowerCase() === nama.toLowerCase() && (i.po || '') === (x[7] || '').trim()) || old && (old.items || []).find(i => i.nama.toLowerCase() === nama.toLowerCase());
         const tot = parseNum(String(x[8] || '').replace(/\./g, '').replace(',', '.'));
         const qty = prev && +prev.qty ? +prev.qty : 1;
         return { nama, qty, sat: prev ? prev.sat || '' : '', harga: tot ? tot / qty : prev ? +prev.harga || 0 : 0, real: prev ? +prev.real || 0 : 0, po: (x[7] || '').trim(), supp: (x[9] || '').trim() || (prev ? prev.supp || '' : ''), ket: [(x[10] || '').trim(), (x[11] || '').trim()].filter(Boolean).join(' · ') };
       });
-      const data = Object.assign({}, old || {}, { no, tgl: yy ? yy + '-' + mm.padStart(2, '0') + '-' + dd.padStart(2, '0') : (old ? old.tgl : today()), unit: DIV_UNIT(list[0][2]), divisi: list[0][2], peminta: old ? old.peminta : 'Unit ' + DIV_UNIT(list[0][2]) + ' BC ' + BCN, keperluan: old ? old.keperluan : 'Sparepart', items, rilis: 'Belum rilis', sumber: 'Sheet BPPB belum dirilis', reals: old ? old.reals || [] : [] });
+      const data = Object.assign({}, old || {}, { no, tgl: yy ? yy + '-' + mm.padStart(2, '0') + '-' + dd.padStart(2, '0') : (old ? old.tgl : today()), unit: DIV_UNIT(list[0][2]), divisi: list[0][2], lokasi: (list[0][3] || '').trim(), peminta: old ? old.peminta : 'Unit ' + DIV_UNIT(list[0][2]) + ' ' + ((list[0][3] || '').trim() || 'BC ' + BCN), keperluan: old ? old.keperluan : 'Sparepart', items, rilis: 'Belum rilis', sumber: 'Sheet BPPB belum dirilis', reals: old ? old.reals || [] : [] });
       ['id', '_by', '_at', '_cr'].forEach(k => delete data[k]);
-      const before = old ? JSON.stringify(Object.assign({}, old, { id: 0, _by: 0, _at: 0, _cr: 0 })) : '';
+      const before = old ? stableJ(Object.assign({}, old, { id: 0, _by: 0, _at: 0, _cr: 0 })) : '';
       if (!old) { save('bppb', data, id); add++; }
-      else if (before !== JSON.stringify(Object.assign({}, data, { id: 0, _by: 0, _at: 0, _cr: 0 }))) { save('bppb', data, id); upd++; }
+      else if (before !== stableJ(Object.assign({}, data, { id: 0, _by: 0, _at: 0, _cr: 0 }))) { save('bppb', data, id); upd++; }
     });
     const gone = all('bppb').filter(b => b.rilis === 'Belum rilis' && b.sumber && !grp.has(b.no));
     gone.forEach(b => save('bppb', Object.assign({}, b, { rilis: 'Rilis', id: undefined, _by: undefined, _at: undefined, _cr: undefined }), b.id));
@@ -411,16 +426,16 @@ async function bppbSheetSync(manual) {
 }
 async function rilisReport(s) {
   const rows = rilisRows(s);
-  const R = await pdfReport({ title: 'List Permintaan BPPB Belum Dirilis', sub: BC + ' · ' + (s.unit ? UNIT_NAME[s.unit] : 'AMP, CMP, SCP, PCP') + ' · per ' + tgl(today(), true), orient: 'l', fname: 'BPPB_Belum_Rilis_Bawen' });
+  const R = await pdfReport({ title: 'List Permintaan BPPB Belum Dirilis', sub: BC + ' · ' + (s.unit ? UNIT_NAME[s.unit] : 'AMP, CMP, SCP, PCP') + ' · per ' + tgl(today(), true), orient: 'l', fname: 'BPPB_Belum_Rilis_' + BCN.replace(/[^A-Za-z0-9]+/g, '_') });
   const items = []; rows.forEach(b => (b.items || []).forEach(i => items.push(Object.assign({ b, st: itemSt(i) }, i))));
   R.kv([['BPPB belum rilis', String(rows.length)], ['Jumlah item', String(items.length)], ['Belum ter PO', String(items.filter(i => i.st === 'Belum ter PO').length), 'red'], ['Estimasi nilai', 'Rp ' + R_(sum(items, i => (+i.qty || 1) * (+i.harga || 0)))]]);
   let n = 0;
-  R.table(['No', 'Divisi', 'No BPPB', 'Tanggal', 'Rincian Permintaan Material', 'Qty', 'No PO', 'Harga', 'Supplier', 'Status', 'Keterangan'], items.map(i => [++n, i.b.unit, i.b.no, tgl(i.b.tgl), i.nama, i.qty ? N_(i.qty) + ' ' + (i.sat || '') : '-', i.po || '-', cellR(i.harga ? R_((+i.qty || 1) * i.harga) : '-'), i.supp || '-', i.st, i.ket || '-']),
+  R.table(['No', 'Divisi', 'No BPPB', 'Tanggal', 'Rincian Permintaan Material', 'Qty', 'No PO', 'Harga', 'Supplier', 'Status', 'Keterangan'], items.map(i => [++n, i.b.unit + (i.b.lokasi ? '\n' + i.b.lokasi : ''), i.b.no, tgl(i.b.tgl), bppbNama(i), i.qty ? N_(i.qty) + ' ' + (i.sat || '') : '-', i.po || '-', cellR(i.harga ? R_((+i.qty || 1) * i.harga) : '-'), i.supp || '-', i.st, [bppbKet(i).urg, bppbKet(i).ket].filter(Boolean).join(' · ') || '-']),
     { fs: 6.9, cs: { 0: { halign: 'center', cellWidth: 8 }, 4: { cellWidth: 52 }, 10: { cellWidth: 40 } }, foot: ['', '', '', '', 'Total', '', '', cellR(R_(sum(items, i => (+i.qty || 1) * (+i.harga || 0)))), '', '', ''] });
   R.sign([['Dibuat oleh,', S.user.name], ['Kepala Unit,', ''], ['Logistik / Purchasing,', '']]);
   await R.save();
 }
-function bppbRows(s) { return byDateDesc(all('bppb').map(b => Object.assign(b, { _s: bppbStat(b) })).filter(b => (!s.unit || b.unit === s.unit) && inMonth(b.tgl, s.month) && (!s.status || b._s.st === s.status) && qMatch(s.q, b.no, b.peminta, b.keperluan, b.ket, (b.items || []).map(i => i.nama).join(' ')))); }
+function bppbRows(s) { return byDateDesc(all('bppb').map(b => Object.assign(b, { _s: bppbStat(b) })).filter(b => (!s.unit || b.unit === s.unit) && (!s.lok || b.lokasi === s.lok) && inMonth(b.tgl, s.month) && (!s.status || b._s.st === s.status) && qMatch(s.q, b.no, b.peminta, b.keperluan, b.ket, (b.items || []).map(i => i.nama).join(' ')))); }
 function bppbForm(d, pre) {
   const v = d ? JSON.parse(JSON.stringify(d)) : Object.assign({ tgl: today(), unit: stateOf('bppb', {}).unit || 'AMP', peminta: S.user.name, keperluan: 'Operasional Produksi', items: [{ qty: 1 }] }, pre || {});
   openForm({
@@ -451,8 +466,8 @@ function bppbDetail(id) {
   const s = bppbStat(b), mt = b.mt && get(b.mt);
   detail({
     title: b.no, sub: UNIT_NAME[b.unit] + ' · ' + (b.keperluan || ''),
-    html: infoGrid([['Tanggal', tgl(b.tgl, true)], ['Peminta', b.peminta], ['Keperluan', b.keperluan], ['Maintenance', mt ? mt.alat + ' — ' + mt.kerusakan : '-'], ['Status', stChip(s.st), true], ['Realisasi', nf0.format(s.p * 100) + '% (' + num(s.real) + ' dari ' + num(s.req) + ')'], ['Est. nilai', rp(s.nilai)], ['Keterangan', b.ket || '-']]) + bar(s.p, 'ok') +
-      '<h4 class="sub">Rincian barang</h4>' + table([{ t: 'Barang', f: i => i.nama, cls: 'strong' }, { t: 'Satuan', f: i => i.sat }, { t: 'Diminta', f: i => num(i.qty), num: true }, { t: 'Terealisasi', f: i => num(i.real || 0), num: true }, { t: 'Sisa', f: i => '<b class="' + (i.qty - (i.real || 0) > 0 ? 't-bad' : 't-ok') + '">' + num(Math.max(0, i.qty - (i.real || 0))) + '</b>', num: true, raw: true }, { t: 'Harga', f: i => rp(i.harga), num: true }, { t: 'No PO', f: i => i.po || '-' }, { t: 'Status pengadaan', f: i => chip(itemSt(i), itemTone(itemSt(i))), raw: true }, { t: 'Keterangan', f: i => i.ket || '-', cls: 'wrap' }], (b.items || []).map((i, k) => Object.assign({ id: k }, i))) +
+    html: infoGrid([['Tanggal', tgl(b.tgl, true)], ['Basecamp', BC + (b.lokasi ? ' · ' + b.lokasi : '')], ['Peminta', b.peminta], ['Keperluan', b.keperluan], ['Maintenance', mt ? mt.alat + ' — ' + mt.kerusakan : '-'], ['Status', stChip(s.st), true], ['Realisasi', nf0.format(s.p * 100) + '% (' + num(s.real) + ' dari ' + num(s.req) + ')'], ['Est. nilai', rp(s.nilai)], ['Keterangan', b.ket || '-']]) + bar(s.p, 'ok') +
+      '<h4 class="sub">Rincian barang</h4>' + table([{ t: 'Barang', f: i => bppbNama(i), cls: 'strong' }, { t: 'Satuan', f: i => i.sat }, { t: 'Diminta', f: i => num(i.qty), num: true }, { t: 'Terealisasi', f: i => num(i.real || 0), num: true }, { t: 'Sisa', f: i => '<b class="' + (i.qty - (i.real || 0) > 0 ? 't-bad' : 't-ok') + '">' + num(Math.max(0, i.qty - (i.real || 0))) + '</b>', num: true, raw: true }, { t: 'Harga', f: i => rp(i.harga), num: true }, { t: 'No PO', f: i => i.po || '-' }, { t: 'Status pengadaan', f: i => chip(itemSt(i), itemTone(itemSt(i))), raw: true }, { t: 'Keterangan', f: i => urgChip(bppbKet(i).urg) + esc(bppbKet(i).ket || '-'), cls: 'wrap', raw: true }], (b.items || []).map((i, k) => Object.assign({ id: k }, i))) +
       ((b.reals || []).length ? '<h4 class="sub">Riwayat realisasi</h4>' + table([{ t: 'Tanggal', f: r => tgl(r.tgl) }, { t: 'Barang', f: r => r.ket }, { t: 'Oleh', f: r => r.by }], b.reals.map((r, k) => Object.assign({ id: k }, r))) : ''),
     buttons: [
       { id: 'pdf', t: 'Cetak BPPB', icon: 'print', dark: true, fn: () => runReport(() => bppbPdf(b)) },
@@ -582,7 +597,7 @@ function tsHtml(s) {
 }
 async function tsReport(s) {
   const T = tsData(s);
-  const R = await pdfReport({ title: 'Time Schedule Perbaikan ' + BC, sub: (s.unit ? UNIT_NAME[s.unit] : 'AMP, CMP, SCP, PCP') + ' · per ' + tgl(today(), true), orient: 'l', fname: 'Time_Schedule_Perbaikan_Bawen' });
+  const R = await pdfReport({ title: 'Time Schedule Perbaikan ' + BC, sub: (s.unit ? UNIT_NAME[s.unit] : 'AMP, CMP, SCP, PCP') + ' · per ' + tgl(today(), true), orient: 'l', fname: 'Time_Schedule_Perbaikan_' + BCN.replace(/[^A-Za-z0-9]+/g, '_') });
   R.kv([['Pekerjaan', String(T.rows.length)], ['Rentang', 'Hari ke-1 s/d ' + T.N + ' (' + T.N + ' hari)'], ['Hari ke-1', T.T0 ? tgl(T.T0, true) : 'Belum diatur (setelah material datang)'], ['Lewat target', String(T.rows.filter(r => r.late).length), T.rows.some(r => r.late) ? 'red' : '']]);
   R.h2('Rekap per unit');
   R.table(['Unit', 'Pekerjaan', 'Mulai', 'Selesai', 'Rentang', 'Realisasi'], T.units.map(U => [U.u + ' - ' + (UNIT_NAME[U.u] || U.u), String(U.list.length), U.list.length ? 'Hari ke-' + U.a + (T.T0 ? ' (' + tgl(tsDate(T, U.a)) + ')' : '') : '-', U.list.length ? 'Hari ke-' + U.b + (T.T0 ? ' (' + tgl(tsDate(T, U.b)) + ')' : '') : '-', U.list.length ? (U.b - U.a + 1) + ' hari' : '-', U.list.length ? jdPct(U.real) : '-']), { fs: 7.6 });

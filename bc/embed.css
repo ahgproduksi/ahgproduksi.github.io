@@ -12,3 +12,11 @@ body.embed #main { padding: 22px clamp(14px, 2vw, 30px) 70px; }
 }
 /* status rekap penjualan sheet (Marketing › Penawaran & Order) */
 .pp.s-Proses { border-top-color: var(--blue2); } .pp.s-Selesai { border-top-color: var(--green); } .pp.s-Batal { border-top-color: #9aa5b3; } .pp.s-Ditagihkan { border-top-color: #d99318; }
+/* penanda basecamp di judul setiap kartu */
+.bcbadge{display:inline-flex;align-items:center;vertical-align:middle;margin-left:8px;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600;letter-spacing:.01em;color:#fff;background:var(--bct,#1f5fae);white-space:nowrap}
+.bcbadge.sm{font-size:11px;padding:2px 8px;margin-left:0}
+@media (max-width:640px){.bcbadge{font-size:11px;padding:2px 8px;margin-left:6px}}
+.bcx-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+body.embed .mcard[data-pick]{border-top:3px solid var(--bct,transparent)}
+body.embed .mcard[data-pick] .mic{color:var(--bct)}
+.bcx-u{display:flex;flex-wrap:wrap;gap:4px 10px;min-width:150px}.bcx-u>span{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}

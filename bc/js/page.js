@@ -4,11 +4,15 @@ const MODS = {};
 const ST = {};
 function stateOf(k, def) { if (!ST[k]) ST[k] = Object.assign({}, def, lsGet(LSP + 'st.' + k, {})); return ST[k]; }
 const persist = k => lsSet(LSP + 'st.' + k, { tab: ST[k].tab, unit: ST[k].unit, view: ST[k].view });
+// penanda basecamp di judul kartu (hanya di ahgproduksi.github.io/bc/, tiap basecamp punya warna sendiri)
+const BC_TONE = { Bawen: '#1f5fae', 'Bugel-Klontong': '#0f8a6a', Tempuran: '#b8641a', Jogoresan: '#7a4fc2' };
+function bcTone(n) { if (BC_TONE[n]) return BC_TONE[n]; let h = 0; for (const c of String(n)) h = (h * 31 + c.charCodeAt(0)) % 360; return 'hsl(' + h + ' 55% 40%)'; }
+const bcBadge = () => CFG.embed && !CFG.all ? ' <span class="bcbadge" style="--bct:' + bcTone(BCN) + '">' + esc(BC) + '</span>' : '';
 function page(root, cfg) {
   const st = cfg.st;
   const mod = MODS[cfg.key];
   root.innerHTML =
-    '<div class="phead"><div class="ptitle"><span class="ptile">' + ic(mod.icon) + '</span><div><h1>' + esc(mod.title) + '</h1><p>' + esc(mod.desc) + '</p></div></div>' +
+    '<div class="phead"><div class="ptitle"><span class="ptile">' + ic(mod.icon) + '</span><div><h1>' + esc(mod.title) + bcBadge() + '</h1><p>' + esc(mod.desc) + '</p></div></div>' +
     '<div class="pact">' + (cfg.actions || []).map(a => '<button class="btn ' + (a.pri ? 'pri' : 'ghost') + '" data-pa="' + a.id + '">' + ic(a.icon || 'plus') + '<span>' + esc(a.t) + '</span></button>').join('') +
     (cfg.report ? '<button class="btn dark" data-pa="__pdf">' + ic('print') + '<span>Cetak PDF</span></button>' : '') + '</div></div>' +
     (cfg.tabs ? '<div class="tabs" role="tablist">' + cfg.tabs.map(t => '<button role="tab" data-tab="' + t.k + '" class="' + (st.tab === t.k ? 'on' : '') + '">' + esc(t.t) + '</button>').join('') + '<i class="tabline"></i></div>' : '') +
