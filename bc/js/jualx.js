@@ -72,6 +72,47 @@ function jxMonths(rows, year) {
   return [...m.values()].sort((a, b) => a.m.localeCompare(b.m));
 }
 
+/* ---------- Kartu Penjualan › Penjualan Rekap Sheet (mis. penjualan batu Jogoresan) ---------- */
+// nilai penjualan: eksternal = nilai barang yang sudah terkirim, internal = nilai yang ditagihkan
+const jxNilaiJual = d => { if (d.tipe !== 'order' || d.status === 'Batal') return 0; if (d.kat === 'Internal') return +d.nilai || 0; const v = +d.vol || 0, k = +d.kirim || 0; return v > 0 ? (+d.nilai || 0) * Math.min(1, k / v) : d.status === 'Selesai' ? +d.nilai || 0 : 0; };
+const jxKatOf = j => j === 'internal' ? 'Internal' : j === 'eksternal' ? 'Eksternal' : '';
+function jxJualSum(month) { const r = jxRows({ month }).filter(d => d.tipe === 'order'); return { nilai: sum(r, jxNilaiJual), masuk: sum(r, 'masuk'), profit: sum(r, 'profit'), n: r.length }; }
+function jxGroup(a, f) { const m = {}; a.forEach(x => { const k = f(x); (m[k] = m[k] || []).push(x); }); return m; }
+function jxJualHtml(s) {
+  const base = { kat: jxKatOf(s.jenis), unit: s.unit, q: s.q };
+  const rows = jxRows(Object.assign({}, base, { month: s.month })).filter(d => d.tipe === 'order');
+  const nilai = sum(rows, jxNilaiJual), masuk = sum(rows, 'masuk'), belum = sum(rows, d => Math.max(0, jxNilaiJual(d) - (+d.masuk || 0)));
+  const volTxt = Object.entries(jxGroup(rows.filter(d => d.vol), d => d.sat || '')).map(([k, a]) => num(sum(a, 'vol')) + ' ' + k).join(' · ') || '-';
+  const ton = sum(rows, 'ton');
+  const prod = Object.entries(jxGroup(rows, d => (d.unit || 'Umum') + '|' + (d.produk || '-'))).map(([k, a]) => ({ id: k, unit: k.split('|')[0], produk: k.split('|')[1], n: a.length, vol: sum(a, 'vol'), sat: (a.find(d => d.sat) || {}).sat || '', ton: sum(a, 'ton'), nilai: sum(a, jxNilaiJual), masuk: sum(a, 'masuk') })).sort((a, b) => b.nilai - a.nilai);
+  const year = (s.month || curMonth()).slice(0, 4);
+  const mm = new Map();
+  jxRows(base).filter(d => d.tipe === 'order' && (!s.month || String(d.bulan).startsWith(year))).forEach(d => { const r = mm.get(d.bulan) || { id: d.bulan, m: d.bulan, n: 0, vol: 0, nilai: 0, masuk: 0 }; r.n++; r.vol += +d.vol || 0; r.nilai += jxNilaiJual(d); r.masuk += +d.masuk || 0; mm.set(d.bulan, r); });
+  const months = [...mm.values()].sort((a, b) => a.m.localeCompare(b.m));
+  return '<div class="note">' + ic('file') + 'Penjualan ' + esc(BC) + ' dari rekap Google Sheet (diimpor ke kartu ini). Nilai penjualan eksternal = nilai barang yang sudah terkirim; internal = nilai yang ditagihkan.</div>' +
+    '<div class="kpis">' + kpi('Nilai penjualan', rpS(nilai), monthLabel(s.month) + ' · ' + rows.length + ' transaksi', 'good') + kpi('Volume terjual', volTxt, ton ? num(ton) + ' ton' : '') +
+    kpi('Uang masuk', rpS(masuk), nilai ? pct(masuk / nilai) + ' dari nilai' : '') + kpi('Belum terbayar', rpS(belum), 'periode ini', belum > 0.5 ? 'warn' : '') + '</div>' +
+    (prod.length ? '<section class="card"><div class="chead"><h3>Per produk</h3><div class="cmeta">' + esc(monthLabel(s.month)) + '</div></div>' + table([
+      { t: 'Unit', f: r => unitChip(r.unit), raw: true }, { t: 'Produk', f: r => r.produk, cls: 'strong' }, { t: 'Transaksi', f: r => r.n, num: true },
+      { t: 'Volume', f: r => r.vol ? num(r.vol) + ' ' + r.sat : '-', num: true }, { t: 'Tonase', f: r => r.ton ? num(r.ton) + ' ton' : '-', num: true },
+      { t: 'Nilai penjualan', f: r => rp(r.nilai), num: true }, { t: 'Uang masuk', f: r => rp(r.masuk), num: true }], prod) + '</section>' : '') +
+    '<section class="card"><div class="chead"><h3>Penjualan per bulan</h3><div class="cmeta">' + (s.month ? 'Tahun ' + year : 'Semua periode') + ' · klik bulan untuk rinciannya</div></div>' + table([
+      { t: 'Bulan', f: r => '<b>' + esc(monthLabel(r.m)) + '</b>', raw: true }, { t: 'Transaksi', f: r => r.n, num: true }, { t: 'Volume', f: r => num(r.vol), num: true },
+      { t: 'Nilai penjualan', f: r => rp(r.nilai), num: true }, { t: 'Uang masuk', f: r => rp(r.masuk), num: true }], months, { click: true, empty: 'Belum ada data.', rowAttr: r => 'data-jxm="' + esc(r.m) + '"' }) + '</section>' +
+    '<section class="card"><div class="chead"><h3>Rincian penjualan ' + esc(monthLabel(s.month)) + '</h3><div class="cmeta">' + rows.length + ' baris</div></div>' + jxTable(rows) + '</section>';
+}
+async function jxJualReport(s) {
+  const base = { kat: jxKatOf(s.jenis), unit: s.unit, q: s.q };
+  const rows = jxRows(Object.assign({}, base, { month: s.month })).filter(d => d.tipe === 'order');
+  const R = await pdfReport({ title: 'Laporan Penjualan Unit', sub: BC + ' · ' + (jxKatOf(s.jenis) || 'Eksternal & Internal') + (s.unit ? ' · ' + s.unit : '') + ' · ' + monthLabel(s.month), orient: 'l', fname: 'Penjualan_' + BCN.replace(/[^A-Za-z0-9]+/g, '_') });
+  R.kv([['Nilai penjualan', 'Rp ' + R_(sum(rows, jxNilaiJual))], ['Uang masuk', 'Rp ' + R_(sum(rows, 'masuk'))], ['Transaksi', String(rows.length)], ['Tonase', N_(sum(rows, 'ton')) + ' ton']]);
+  R.table(['Tanggal', 'Kategori', 'Customer / Proyek', 'Unit', 'Produk', 'Volume', 'Tonase', 'Nilai', 'Uang Masuk', 'Status', 'Pembayaran'],
+    rows.map(d => [tgl(d.tgl), d.kat, d.nama, d.unit, d.produk || '-', cellR(d.vol ? N_(d.vol) + ' ' + (d.sat || '') : '-'), cellR(d.ton ? N_(d.ton) : '-'), cellR(R_(jxNilaiJual(d))), cellR(R_(d.masuk)), d.status || '-', d.bayar || '-']),
+    { fs: 7, foot: ['Total', '', '', '', '', '', cellR(N_(sum(rows, 'ton'))), cellR(R_(sum(rows, jxNilaiJual))), cellR(R_(sum(rows, 'masuk'))), '', ''] });
+  R.sign();
+  await R.save();
+}
+
 /* ---------- Cash Flow › Penjualan Unit ---------- */
 function jxKasHtml(s) {
   const base = { kat: s.kat, unit: s.unit, q: s.q };

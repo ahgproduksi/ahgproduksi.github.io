@@ -35,11 +35,12 @@
     const m = R0.data[bc]; if (!m) return null;
     return withDocs(m, () => {
       const jd = jualData({ month: curMonth() }), kt = kasTotals();
+      const jx = typeof jxJualSum === 'function' && JXON() ? jxJualSum(curMonth()) : { nilai: 0, profit: 0 }; // penjualan rekap sheet (mis. batu Jogoresan)
       const prodM = all('prod').filter(p => p.status !== 'Batal' && inMonth(p.tgl, curMonth()));
       let low = 0; UNITS.forEach(u => stockSaldo(u).forEach(r => { if ((r.status === 'Menipis' || r.status === 'Habis') && (r.masuk || r.prod || r.keluar)) low++; }));
       const mt = all('mt').filter(x => x.status !== 'Selesai');
       return {
-        jual: jd.nilai, profit: jd.profit, so: prodM.length, soNilai: sum(prodM, p => p.vol * p.harga), saldo: kt.saldo, piutang: kt.piutang, hutang: kt.hutang, telat: kt.telat,
+        jual: jd.nilai + jx.nilai, profit: jd.profit + jx.profit, so: prodM.length, soNilai: sum(prodM, p => p.vol * p.harga), saldo: kt.saldo, piutang: kt.piutang, hutang: kt.hutang, telat: kt.telat,
         low, mt: mt.length, mtLate: mt.filter(mtLate).length, bppb: all('bppb').filter(b => b.rilis === 'Belum rilis').length,
         mp: all('mp').filter(x => x.status !== 'Nonaktif').length, docs: [...m.values()].filter(d => !d.del).length
       };

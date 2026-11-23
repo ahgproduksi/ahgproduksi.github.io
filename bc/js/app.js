@@ -150,7 +150,7 @@ function route(first) {
   draw();
 }
 function refreshView() {
-  if (!MODALS.length && APP.ctl && JXON() !== APP.jxOn && ['kas', 'mkt', 'cust'].includes(APP.route)) return route(); // tab penjualan sheet muncul setelah data tersinkron
+  if (!MODALS.length && APP.ctl && JXON() !== APP.jxOn && ['kas', 'mkt', 'cust', 'jual'].includes(APP.route)) return route(); // tab penjualan sheet muncul setelah data tersinkron
   if (MODALS.length && APP.route !== '') { if (APP.ctl) APP.ctl.fill(); return; }
   if (APP.ctl) APP.ctl.fill();
   else if (APP.route === '') renderHome($('#main'), true);

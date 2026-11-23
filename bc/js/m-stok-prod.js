@@ -405,17 +405,20 @@ MODS.jual = {
   title: 'Penjualan', icon: 'jual', desc: 'Pengiriman ke proyek internal PT. AHG dan retail, nilai jual, HPP BUASO, profit',
   render(root) {
     const st = stateOf('jual', { tab: 'rekap', unit: '', q: '', month: curMonth(), jenis: '' });
+    const jx = JXON();
+    if (jx && !st.jxSeen) { st.jxSeen = 1; if (!all('kirim').length) st.tab = 'jx'; } // basecamp tanpa catatan pengiriman → langsung ke rekap sheet
+    if (!jx && st.tab === 'jx') st.tab = 'rekap';
     return page(root, {
-      key: 'jual', st, report: jualReport,
-      tabs: [{ k: 'rekap', t: 'Rekap Penjualan' }, { k: 'kirim', t: 'Rincian Pengiriman' }, { k: 'hpp', t: 'Breakdown HPP (BUASO)' }],
+      key: 'jual', st, report: s => s.tab === 'jx' && JXON() ? jxJualReport(s) : jualReport(s),
+      tabs: (jx ? [{ k: 'jx', t: 'Penjualan Rekap Sheet' }] : []).concat([{ k: 'rekap', t: 'Rekap Penjualan' }, { k: 'kirim', t: 'Rincian Pengiriman' }, { k: 'hpp', t: 'Breakdown HPP (BUASO)' }]),
       actions: [{ id: 'kirim', t: 'Catat Pengiriman', pri: true, icon: 'jadwal' }],
       on: { kirim: () => kirimForm() },
       filter: s => periodBar(s, 'jual', '<select data-fk="jenis"><option value="">Internal & eksternal</option><option value="internal"' + (s.jenis === 'internal' ? ' selected' : '') + '>Internal PT. AHG</option><option value="eksternal"' + (s.jenis === 'eksternal' ? ' selected' : '') + '>Eksternal / Retail</option></select>'),
-      body: s => jualHtml(s),
-      bind: (el, s) => $$('[data-row]', el).forEach(tr => tr.onclick = () => s.tab === 'kirim' ? kirimForm(get(tr.dataset.row)) : soDetail(tr.dataset.row))
+      body: s => s.tab === 'jx' && JXON() ? jxJualHtml(s) : jualHtml(s),
+      bind: (el, s, fill) => { if (s.tab === 'jx' && JXON()) return jxKasBind(el, s, fill); $$('[data-row]', el).forEach(tr => tr.onclick = () => s.tab === 'kirim' ? kirimForm(get(tr.dataset.row)) : soDetail(tr.dataset.row)); }
     });
   },
-  summary() { const d = jualData({ month: curMonth() }); return { main: rpS(d.nilai) + ' bulan ini', sub: 'Profit ' + rpS(d.profit) }; }
+  summary() { const d = jualData({ month: curMonth() }), x = JXON() ? jxJualSum(curMonth()) : null; return x && x.n ? { main: rpS(d.nilai + x.nilai) + ' bulan ini', sub: x.n + ' penjualan rekap sheet · uang masuk ' + rpS(x.masuk) } : { main: rpS(d.nilai) + ' bulan ini', sub: 'Profit ' + rpS(d.profit) }; }
 };
 function jualData(s) {
   const kir = all('kirim').filter(k => inMonth(k.tgl, s.month)).map(k => Object.assign(k, { p: get(k.so) })).filter(k => k.p && k.p.status !== 'Batal' && (!s.unit || k.p.unit === s.unit) && (!s.jenis || k.p.jenis === s.jenis) && qMatch(s.q, k.p.no, k.p.proyek, k.p.produk, custName(k.p.cust), k.sj, k.kendaraan, k.sopir));

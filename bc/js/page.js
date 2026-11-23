@@ -7,7 +7,16 @@ const persist = k => lsSet(LSP + 'st.' + k, { tab: ST[k].tab, unit: ST[k].unit, 
 // penanda basecamp di judul kartu (hanya di ahgproduksi.github.io/bc/, tiap basecamp punya warna sendiri)
 const BC_TONE = { Bawen: '#1f5fae', 'Bugel-Klontong': '#0f8a6a', Tempuran: '#b8641a', Jogoresan: '#7a4fc2' };
 function bcTone(n) { if (BC_TONE[n]) return BC_TONE[n]; let h = 0; for (const c of String(n)) h = (h * 31 + c.charCodeAt(0)) % 360; return 'hsl(' + h + ' 55% 40%)'; }
-const bcBadge = () => CFG.embed && !CFG.all ? ' <span class="bcbadge" style="--bct:' + bcTone(BCN) + '">' + esc(BC) + '</span>' : '';
+function bcList() { try { return CFG.parent && CFG.parent.list ? CFG.parent.list() : []; } catch { return []; } }
+// label basecamp = pemilih basecamp (pindah basecamp langsung dari kartu mana pun; '' = Semua Basecamp)
+function bcBadge() {
+  if (!CFG.embed || CFG.all) return '';
+  const l = bcList(); if (!l.includes(BCN)) l.push(BCN);
+  if (!CFG.parent || !CFG.parent.pick) return ' <span class="bcbadge" style="--bct:' + bcTone(BCN) + '">' + esc(BC) + '</span>';
+  return ' <label class="bcbadge bcpick" style="--bct:' + bcTone(BCN) + '" title="Pilih basecamp"><select data-bcpick aria-label="Pilih basecamp">' +
+    l.map(b => '<option value="' + esc(b) + '"' + (b === BCN ? ' selected' : '') + '>Basecamp ' + esc(b) + '</option>').join('') + '<option value="">Semua Basecamp</option></select></label>';
+}
+function bcPickBind(root) { const s = $('[data-bcpick]', root); if (s) s.onchange = () => { try { CFG.parent.pick(s.value, APP.route); } catch { } }; }
 function page(root, cfg) {
   const st = cfg.st;
   const mod = MODS[cfg.key];
@@ -42,6 +51,7 @@ function page(root, cfg) {
     moveLine(); drawFilter(); fill(true);
   });
   $$('[data-pa]', root).forEach(b => b.onclick = () => b.dataset.pa === '__pdf' ? runReport(() => cfg.report(st)) : cfg.on[b.dataset.pa](st));
+  bcPickBind(root);
   drawFilter(); fill();
   requestAnimationFrame(moveLine);
   window.addEventListener('resize', moveLine);

@@ -20,3 +20,9 @@ body.embed #main { padding: 22px clamp(14px, 2vw, 30px) 70px; }
 body.embed .mcard[data-pick]{border-top:3px solid var(--bct,transparent)}
 body.embed .mcard[data-pick] .mic{color:var(--bct)}
 .bcx-u{display:flex;flex-wrap:wrap;gap:4px 10px;min-width:150px}.bcx-u>span{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
+.bcpick{position:relative;padding:0;cursor:pointer}
+.bcpick select{appearance:none;-webkit-appearance:none;border:0;background:transparent;color:#fff;font:inherit;font-weight:600;padding:3px 26px 3px 10px;cursor:pointer;outline:none;border-radius:999px}
+.bcpick select option{color:#1b2733;background:#fff}
+.bcpick::after{content:'';position:absolute;right:10px;top:50%;width:6px;height:6px;border-right:2px solid #fff;border-bottom:2px solid #fff;transform:translateY(-70%) rotate(45deg);pointer-events:none}
+.bcpick:focus-within{box-shadow:0 0 0 3px color-mix(in srgb,var(--bct) 30%,transparent)}
+@media (max-width:640px){.bcpick select{padding:2px 22px 2px 8px}}
