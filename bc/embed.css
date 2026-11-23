@@ -10,3 +10,5 @@ body.embed #main { padding: 22px clamp(14px, 2vw, 30px) 70px; }
   body.embed #main > .pres > *{flex-shrink:0}
   body.embed #main > .pres > .card:last-child,body.embed #main > .pres > section.card:last-child{flex-grow:1;margin-bottom:0}
 }
+/* status rekap penjualan sheet (Marketing › Penawaran & Order) */
+.pp.s-Proses { border-top-color: var(--blue2); } .pp.s-Selesai { border-top-color: var(--green); } .pp.s-Batal { border-top-color: #9aa5b3; } .pp.s-Ditagihkan { border-top-color: #d99318; }

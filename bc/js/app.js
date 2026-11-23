@@ -138,7 +138,7 @@ function route(first) {
   document.title = title + ' · ' + BC;
   main.classList.remove('enter');
   const draw = () => {
-    APP.ctl = null;
+    APP.ctl = null; APP.jxOn = JXON();
     if (r === '') renderHome(main);
     else if (r === 'pengguna') renderUsers(main);
     else if (r === 'profil') { renderHome(main); profileForm(); history.replaceState(null, '', '#/'); APP.route = ''; }
@@ -150,6 +150,7 @@ function route(first) {
   draw();
 }
 function refreshView() {
+  if (!MODALS.length && APP.ctl && JXON() !== APP.jxOn && ['kas', 'mkt', 'cust'].includes(APP.route)) return route(); // tab penjualan sheet muncul setelah data tersinkron
   if (MODALS.length && APP.route !== '') { if (APP.ctl) APP.ctl.fill(); return; }
   if (APP.ctl) APP.ctl.fill();
   else if (APP.route === '') renderHome($('#main'), true);

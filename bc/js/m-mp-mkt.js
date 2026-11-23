@@ -92,13 +92,17 @@ const MKT_ST = ['Prospek', 'Penawaran', 'Negosiasi', 'Menang', 'Kalah'];
 MODS.mkt = {
   title: 'Marketing', icon: 'mkt', desc: 'Prospek proyek ke depan: customer, produk, volume, dan estimasi omzet',
   render(root) {
-    const st = stateOf('mkt', { unit: '', q: '', status: '' });
+    const st = stateOf('mkt', { unit: '', q: '', status: '', tab: 'prospek', month: curMonth(), kat: '' });
+    if (!JXON()) st.tab = 'prospek';
+    const jxTab = s => JXON() && (s.tab === 'sph' || s.tab === 'analisa');
     return page(root, {
-      key: 'mkt', st, report: mktReport,
+      key: 'mkt', st, report: s => jxTab(s) ? jxMktReport(s) : mktReport(s),
+      tabs: JXON() ? [{ k: 'prospek', t: 'Prospek Proyek' }, { k: 'sph', t: 'Penawaran & Order (SPH)' }, { k: 'analisa', t: 'Analisa Bulanan' }] : null,
       actions: [{ id: 'add', t: 'Tambah Prospek', pri: true }],
       on: { add: () => mktForm() },
-      filter: s => periodBar(s, 'mkt', '<select data-fk="status"><option value="">Semua status</option>' + MKT_ST.map(x => '<option' + (s.status === x ? ' selected' : '') + '>' + x + '</option>').join('') + '</select>'),
+      filter: s => jxTab(s) ? jxMktFilter(s) : periodBar(Object.assign({}, s, { month: undefined }), 'mkt', '<select data-fk="status"><option value="">Semua status</option>' + MKT_ST.map(x => '<option' + (s.status === x ? ' selected' : '') + '>' + x + '</option>').join('') + '</select>'),
       body: s => {
+        if (jxTab(s)) return jxMktHtml(s);
         const rows = mktRows(s);
         const open = rows.filter(r => !['Menang', 'Kalah'].includes(r.status));
         return '<div class="kpis">' + kpi('Prospek terbuka', open.length) + kpi('Estimasi omzet', rpS(sum(open, r => r.vol * r.harga)), 'prospek terbuka') + kpi('Omzet tertimbang', rpS(sum(open, r => r.vol * r.harga * (r.peluang || 0) / 100)), 'x peluang') + kpi('Menang', rpS(sum(rows.filter(r => r.status === 'Menang'), r => r.vol * r.harga)), rows.filter(r => r.status === 'Menang').length + ' proyek', 'good') + '</div>' +
@@ -110,7 +114,7 @@ MODS.mkt = {
             { t: 'Target', f: r => tgl(r.target) }, { t: 'Status', f: r => stChip(r.status), raw: true }
           ], rows, { click: true, empty: 'Belum ada prospek.', emptyIcon: 'mkt' }) + '</section>';
       },
-      bind: el => $$('[data-row]', el).forEach(tr => tr.onclick = () => mktForm(get(tr.dataset.row)))
+      bind: (el, s, fill) => jxTab(s) ? jxMktBind(el, s, fill) : $$('[data-row]', el).forEach(tr => tr.onclick = () => mktForm(get(tr.dataset.row)))
     });
   },
   summary() { const a = all('mkt').filter(r => !['Menang', 'Kalah'].includes(r.status)); return { main: rpS(sum(a, r => r.vol * r.harga)) + ' estimasi omzet', sub: a.length + ' prospek terbuka' }; }

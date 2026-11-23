@@ -51,7 +51,7 @@ function detail({ title, sub, html, buttons, wide = true, bind }) {
   return m;
 }
 const infoGrid = pairs => '<dl class="igrid">' + pairs.filter(Boolean).map(([k, v, raw]) => '<div><dt>' + esc(k) + '</dt><dd>' + (raw ? v : esc(v ?? '-')) + '</dd></div>').join('') + '</dl>';
-const statusTone = s => ({ 'Aman': 'ok', 'Menipis': 'warn', 'Habis': 'bad', 'Kosong': 'mute', 'Lunas': 'ok', 'Sebagian': 'warn', 'Belum dibayar': 'bad', 'Terealisasi': 'ok', 'Belum terealisasi': 'bad', 'Selesai': 'ok', 'Berjalan': 'info', 'Rencana': 'mute', 'Batal': 'mute', 'Terkirim': 'ok', 'Tunda': 'warn', 'Dilaporkan': 'bad', 'Dalam Perbaikan': 'info', 'Menunggu Sparepart': 'warn', 'Menang': 'ok', 'Kalah': 'mute', 'Negosiasi': 'warn', 'Penawaran': 'info', 'Prospek': 'mute', 'Usulan': 'mute', 'Disetujui': 'info', 'Ditunda': 'warn', 'Aktif': 'ok', 'Nonaktif': 'mute', 'Tinggi': 'bad', 'Sedang': 'warn', 'Rendah': 'mute' }[s] || '');
+const statusTone = s => ({ 'Aman': 'ok', 'Menipis': 'warn', 'Habis': 'bad', 'Kosong': 'mute', 'Lunas': 'ok', 'Sebagian': 'warn', 'Belum dibayar': 'bad', 'Terealisasi': 'ok', 'Belum terealisasi': 'bad', 'Selesai': 'ok', 'Berjalan': 'info', 'Rencana': 'mute', 'Batal': 'mute', 'Terkirim': 'ok', 'Tunda': 'warn', 'Dilaporkan': 'bad', 'Dalam Perbaikan': 'info', 'Menunggu Sparepart': 'warn', 'Menang': 'ok', 'Kalah': 'mute', 'Negosiasi': 'warn', 'Penawaran': 'info', 'Prospek': 'mute', 'Usulan': 'mute', 'Disetujui': 'info', 'Ditunda': 'warn', 'Aktif': 'ok', 'Nonaktif': 'mute', 'Tinggi': 'bad', 'Sedang': 'warn', 'Rendah': 'mute', 'Proses': 'info', 'Ditagihkan': 'warn', 'Diterima': 'ok', 'Revisi': 'warn', 'Piutang': 'warn' }[s] || '');
 const stChip = s => chip(s, statusTone(s));
 
 /* ---------- kunci edit (HPP & BUASO, Struktur Organisasi): kata sandi dicek di server, sesi terbuka 2 jam ---------- */
@@ -81,3 +81,5 @@ const gated = (area, fn) => (...a) => editGate(area).then(ok => { if (ok) fn(...
 async function editRelock() { EDITK.until = 0; try { await rpc('bw_edit_unlock', { p_token: S.token, p_pin: '', p_lock: true }); } catch { } toast('Kunci edit ditutup'); emit(); }
 const editBadge = () => editOpen() ? '<div class="note lock open">' + ic('lock') + 'Kunci edit <b>terbuka</b> sampai ' + new Date(EDITK.until).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + '. <button class="btn ghost sm" data-relock>Kunci sekarang</button></div>' : '';
 function bindRelock(el) { const b = $('[data-relock]', el); if (b) b.onclick = e => { e.stopPropagation(); editRelock(); }; }
+/* rekap penjualan dari sheet (js/jualx.js — hanya dimuat di Kartu Operasional ahgproduksi /bc/) */
+const JXON = () => typeof jxHas === 'function' && jxHas();

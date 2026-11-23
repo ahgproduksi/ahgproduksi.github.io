@@ -17,13 +17,15 @@ MODS.kas = {
     const st = stateOf('kas', { tab: 'ringkas', q: '', month: curMonth() });
     st.units = false;
     return page(root, {
-      key: 'kas', st, report: kasReport,
-      tabs: [{ k: 'ringkas', t: 'Ringkasan' }, { k: 'arus', t: 'Arus Kas' }, { k: 'inv', t: 'Invoice' }, { k: 'piutang', t: 'Piutang' }, { k: 'hutang', t: 'Hutang' }],
+      key: 'kas', st, report: s => s.tab === 'jx' ? jxKasReport(s) : kasReport(s),
+      tabs: [{ k: 'ringkas', t: 'Ringkasan' }, { k: 'arus', t: 'Arus Kas' }].concat(JXON() ? [{ k: 'jx', t: 'Penjualan Unit' }] : []).concat([{ k: 'inv', t: 'Invoice' }, { k: 'piutang', t: 'Piutang' }, { k: 'hutang', t: 'Hutang' }]),
       actions: [{ id: 'in', t: 'Uang Masuk', icon: 'in', pri: true }, { id: 'out', t: 'Uang Keluar', icon: 'out' }, { id: 'inv', t: 'Buat Invoice', icon: 'file' }, { id: 'ht', t: 'Catat Hutang', icon: 'plus' }],
       on: { in: () => kasForm(null, { arah: 'masuk' }), out: () => kasForm(null, { arah: 'keluar' }), inv: () => invForm(), ht: () => hutangForm() },
-      filter: s => periodBar(['piutang'].includes(s.tab) ? Object.assign({}, s, { month: undefined }) : s),
-      body: s => kasHtml(s),
-      bind: (el, s) => {
+      filter: s => s.tab === 'jx' && JXON() ? periodBar(s, 'kas', jxUnitOpts(s) + jxKatOpts(s)) : periodBar(['piutang'].includes(s.tab) ? Object.assign({}, s, { month: undefined }) : s),
+      body: s => s.tab === 'jx' && JXON() ? jxKasHtml(s) : (s.tab === 'ringkas' && JXON() ? jxKasMini(s) : '') + kasHtml(s),
+      bind: (el, s, fill) => {
+        if (s.tab === 'jx' && JXON()) return jxKasBind(el, s, fill);
+        $$('[data-jxgo]', el).forEach(b => b.onclick = () => { const t = document.querySelector('[data-tab="jx"]'); if (t) t.click(); });
         $$('[data-row]', el).forEach(tr => tr.onclick = () => {
           const id = tr.dataset.row;
           if (s.tab === 'inv' || id.startsWith('in')) return invDetail(id);
@@ -263,10 +265,12 @@ MODS.cust = {
       key: 'cust', st, report: custReport,
       actions: [{ id: 'add', t: 'Tambah Customer', pri: true }],
       on: { add: () => custForm() },
-      filter: s => periodBar(s, 'cust', '<select data-fk="jenis"><option value="">Semua jenis</option><option' + (s.jenis === 'Internal' ? ' selected' : '') + '>Internal</option><option' + (s.jenis === 'Eksternal' ? ' selected' : '') + '>Eksternal</option></select>'),
+      filter: s => periodBar(s, 'cust', (JXON() ? '<select data-fk="aktif" title="Asal customer"><option value="">Semua customer</option><option value="jx"' + (s.aktif === 'jx' ? ' selected' : '') + '>Ada penjualan di rekap sheet</option><option value="pi"' + (s.aktif === 'pi' ? ' selected' : '') + '>Memiliki piutang</option></select>' : '') + '<select data-fk="jenis"><option value="">Semua jenis</option><option' + (s.jenis === 'Internal' ? ' selected' : '') + '>Internal</option><option' + (s.jenis === 'Eksternal' ? ' selected' : '') + '>Eksternal</option></select>'),
       body: s => {
-        const rows = custList().filter(c => (!s.jenis || c.jenis === s.jenis) && qMatch(s.q, c.nama, c.pic, c.ktp, c.npwp, c.alamat, c.wa)).map(c => Object.assign(c, custStats(c.id)));
-        return '<div class="kpis">' + kpi('Jumlah customer', rows.length) + kpi('Repeat order', rows.filter(c => c.order > 1).length, 'lebih dari 1 SO') + kpi('Total penjualan', rpS(sum(rows, 'jual'))) + kpi('Total piutang', rpS(sum(rows, 'piutang')), '', sum(rows, 'piutang') ? 'warn' : '') + '</div>' +
+        const rows = custList().filter(c => (!s.jenis || c.jenis === s.jenis) && qMatch(s.q, c.nama, c.pic, c.ktp, c.npwp, c.alamat, c.wa)).map(c => Object.assign(c, custStats(c.id)))
+          .filter(c => !s.aktif || (s.aktif === 'jx' ? JXON() && (jxByCust()[c.id] || []).length : c.piutang > 0));
+        return (JXON() ? '<div class="note">' + ic('cust') + 'Customer eksternal (retail) dan internal (proyek HO PT. AHG) juga diambil dari rekap sheet penjualan — penjualan & piutangnya ikut dihitung. Gunakan filter jenis untuk memisahkan.</div>' : '') +
+          '<div class="kpis">' + kpi('Jumlah customer', rows.length, JXON() ? rows.filter(c => c.jenis === 'Eksternal').length + ' eksternal · ' + rows.filter(c => c.jenis === 'Internal').length + ' internal' : '') + kpi('Repeat order', rows.filter(c => c.order > 1).length, 'lebih dari 1 SO') + kpi('Total penjualan', rpS(sum(rows, 'jual'))) + kpi('Total piutang', rpS(sum(rows, 'piutang')), '', sum(rows, 'piutang') ? 'warn' : '') + '</div>' +
           '<section class="card">' + table([
             { t: 'Customer', f: c => '<b>' + esc(c.nama) + '</b><small>' + esc([c.pic, c.ktp && c.ktp !== c.pic ? 'KTP: ' + c.ktp : ''].filter(Boolean).join(' · ') || '-') + '</small>', raw: true },
             { t: 'Jenis', f: c => chip(c.jenis || '-', c.jenis === 'Internal' ? 'info' : 'ok'), raw: true }, { t: 'WhatsApp / HP', f: c => waShow(c.wa) }, { t: 'NPWP', f: c => c.npwp || '-' },
@@ -282,7 +286,9 @@ MODS.cust = {
 };
 function custStats(id) {
   const so = all('prod').filter(p => p.cust === id && p.status !== 'Batal');
-  return { order: so.length, last: so.reduce((m, p) => p.tgl > m ? p.tgl : m, ''), jual: sum(so, p => soStats(p).nilaiJual), piutang: sum(all('inv').filter(i => i.cust === id), i => invStat(i).sisa) };
+  const r = { order: so.length, last: so.reduce((m, p) => p.tgl > m ? p.tgl : m, ''), jual: sum(so, p => soStats(p).nilaiJual), piutang: sum(all('inv').filter(i => i.cust === id), i => invStat(i).sisa) };
+  if (JXON()) { const x = jxCustStats(id); r.order += x.order; r.last = x.last > r.last ? x.last : r.last; r.jual += x.jual; r.piutang += x.piutang; }
+  return r;
 }
 function custForm(d, cb, jenis, onCancel) {
   if (typeof d === 'string') d = custGet(d);
@@ -316,8 +322,10 @@ function custDetail(id) {
   detail({
     title: c.nama, sub: (c.jenis || '') + ' · ' + st.order + ' order',
     html: infoGrid([['Kontak person', c.pic], ['Nama sesuai KTP', c.ktp], ['NIK', c.nik], ['NPWP', c.npwp], ['WhatsApp', waShow(c.wa)], ['HP lain', c.hp], ['Email', c.email], ['Alamat', c.alamat], ['Total penjualan', rp(st.jual)], ['Piutang', rp(st.piutang)]]) +
-      '<h4 class="sub">Riwayat order</h4>' + table([{ t: 'SO / WO', f: p => p.no, cls: 'strong' }, { t: 'Tanggal', f: p => tgl(p.tgl) }, { t: 'Proyek', f: p => p.proyek }, { t: 'Produk', f: p => p.produk }, { t: 'Volume', f: p => num(p.vol) + ' ' + p.sat, num: true }, { t: 'Nilai', f: p => rp(p.vol * p.harga), num: true }, { t: 'Status', f: p => stChip(soStatus(p)), raw: true }], so, { empty: 'Belum ada order.' }) +
-      '<h4 class="sub">Invoice</h4>' + table([{ t: 'No.', f: i => i.no, cls: 'strong' }, { t: 'Tanggal', f: i => tgl(i.tgl) }, { t: 'Jatuh tempo', f: i => tgl(i.jt) }, { t: 'Total', f: i => rp(i.total), num: true }, { t: 'Sisa', f: i => rp(i._s.sisa), num: true }, { t: 'Status', f: i => stChip(i._s.st), raw: true }], inv, { empty: 'Belum ada invoice.' }),
+      (JXON() && (jxByCust()[id] || []).length ? '<h4 class="sub">Riwayat penjualan (rekap sheet ' + esc(c.jenis === 'Internal' ? 'tagihan internal' : 'penjualan eksternal') + ')</h4>' + jxTable(jxByCust()[id]) : '') +
+      (so.length || !JXON() || !(jxByCust()[id] || []).length ? '<h4 class="sub">Riwayat order</h4>' + table([{ t: 'SO / WO', f: p => p.no, cls: 'strong' }, { t: 'Tanggal', f: p => tgl(p.tgl) }, { t: 'Proyek', f: p => p.proyek }, { t: 'Produk', f: p => p.produk }, { t: 'Volume', f: p => num(p.vol) + ' ' + p.sat, num: true }, { t: 'Nilai', f: p => rp(p.vol * p.harga), num: true }, { t: 'Status', f: p => stChip(soStatus(p)), raw: true }], so, { empty: 'Belum ada order.' }) : '') +
+      (inv.length || !JXON() || !(jxByCust()[id] || []).length ? '<h4 class="sub">Invoice</h4>' + table([{ t: 'No.', f: i => i.no, cls: 'strong' }, { t: 'Tanggal', f: i => tgl(i.tgl) }, { t: 'Jatuh tempo', f: i => tgl(i.jt) }, { t: 'Total', f: i => rp(i.total), num: true }, { t: 'Sisa', f: i => rp(i._s.sisa), num: true }, { t: 'Status', f: i => stChip(i._s.st), raw: true }], inv, { empty: 'Belum ada invoice.' }) : ''),
+    bind: el => JXON() && jxBind(el),
     buttons: [
       c.wa ? { id: 'chat', t: 'Chat WA', icon: 'wa', fn: () => window.open(waLink(c.wa), '_blank') } : null,
       c.wa && st.piutang > 0 ? { id: 'tagih', t: 'Tagih via WA', icon: 'send', fn: () => window.open(waLink(c.wa, tagihText(id)), '_blank') } : null,
