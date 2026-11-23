@@ -2,3 +2,11 @@
 body.embed .mainw { margin-left: 0; min-height: 0; }
 body.embed #main { padding: 22px clamp(14px, 2vw, 30px) 70px; }
 @media (max-width: 640px) { body.embed #main { padding: 14px 12px 90px; } }
+/* layar penuh: kartu/tabel terakhir di halaman kartu memanjang sampai bawah iframe */
+@media (min-width:641px){
+  body.embed #main{min-height:100vh;display:flex;flex-direction:column;padding-bottom:16px}
+  body.embed #main > *{flex-shrink:0}
+  body.embed #main > .pres{flex:1 0 auto;display:flex;flex-direction:column}
+  body.embed #main > .pres > *{flex-shrink:0}
+  body.embed #main > .pres > .card:last-child,body.embed #main > .pres > section.card:last-child{flex-grow:1;margin-bottom:0}
+}

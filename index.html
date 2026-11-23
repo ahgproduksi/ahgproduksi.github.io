@@ -1241,6 +1241,13 @@ main[data-view=bc]{padding:0!important}
   .head h1{font-size:19px}.head h1>.ei:first-child{width:40px;height:40px;border-radius:11px}
   .acard{padding:22px 20px 18px}
 }
+/* layar penuh (desktop/tablet): isi halaman mentok sampai bawah layar — tanpa sisa ruang kosong */
+@media (min-width:821px){
+  main{min-height:calc(100dvh - var(--toph));padding-bottom:16px}
+  main[data-view=reminder]:has(> .rsplit){height:calc(100dvh - var(--toph))}
+  .chat{height:calc(100dvh - var(--toph) - 24px - 18px)}
+  main[data-view=admin] > .card.tbl-wrap{flex-grow:1}
+}
 </style>
 </head>
 <body>
@@ -3453,7 +3460,7 @@ const KCH = {
 };
 
 // Virtual Work AHG — reminder, global chat (+ whisper), task (+ rutin mingguan) dan kasbon tim. Data di Supabase (proyek ahg-produksi), sinkron real time.
-const BUILD = '20261123-141808';
+const BUILD = '20261123-142439';
 const SB_URL = 'https://herltzublcqpbgyxbbyp.supabase.co', SB_KEY = 'sb_publishable_FMSC0iqDRLsRXtvTtZX0Ow_piPi5bli'; // public key; tables closed, only ahg_* functions
 // File → Google Drive yulius.krisnawan (folder "AHG Produksi", 5 GiB) lewat Edge Function ahg-file: cek login, buka sesi upload Drive
 // (browser kirim byte langsung ke Google), unduh diproksikan per 8 MiB. Cadangan saat Drive terputus: Supabase Storage (bucket ahg-files).
