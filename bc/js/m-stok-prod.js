@@ -19,11 +19,12 @@ MODS.stok = {
             const rows = stockSaldo(u).filter(r => qMatch(s.q, r.m.nama, r.m.kat));
             const tone = { Menipis: 0, Habis: 0 }; rows.forEach(r => tone[r.status] = (tone[r.status] || 0) + 1);
             if (!s.unit && !rows.some(r => r.masuk || r.prod || r.keluar || r.adj)) return '';
-            return '<section class="card"><div class="chead"><div>' + unitChip(u) + '<h3>' + esc(UNIT_NAME[u]) + '</h3></div><div class="cmeta">' + rows.length + ' material' + (tone.Menipis ? ' · <b class="t-warn">' + tone.Menipis + ' menipis</b>' : '') + (tone.Habis ? ' · <b class="t-bad">' + tone.Habis + ' habis</b>' : '') + '</div></div>' +
+            return '<section class="card"><div class="chead"><div>' + unitChip(u) + '<h3>' + esc(UNIT_NAME[u]) + '</h3></div><div class="cmeta">' + rows.length + ' material · posisi per ' + tgl(stokPosisi(rows)) + (tone.Menipis ? ' · <b class="t-warn">' + tone.Menipis + ' menipis</b>' : '') + (tone.Habis ? ' · <b class="t-bad">' + tone.Habis + ' habis</b>' : '') + '</div></div>' +
               table([
                 { t: 'Material', f: r => r.m.nama, cls: 'strong' }, { t: 'Kategori', f: r => r.m.kat }, { t: 'Satuan', f: r => r.m.sat },
                 { t: 'Masuk', f: r => r.masuk, num: true }, { t: 'Keluar', f: r => r.keluar, num: true }, { t: 'Pemakaian Produksi', f: r => r.prod, num: true },
-                { t: 'Penyesuaian', f: r => r.adj, num: true }, { t: 'Saldo', f: r => '<b>' + num(r.saldo) + '</b>', num: true, raw: true }, { t: 'Min.', f: r => r.m.min || '-', num: true },
+                { t: 'Penyesuaian', f: r => r.adj, num: true }, { t: 'Saldo', f: r => '<b>' + num(r.saldo) + '</b>', num: true, raw: true },
+                { t: 'Per Tanggal', f: r => '<span style="white-space:nowrap">' + (r.last ? tgl(r.last) : tgl(today()) + ' <span class="muted">(cut off)</span>') + '</span>', raw: true }, { t: 'Min.', f: r => r.m.min || '-', num: true },
                 { t: 'Status', f: r => stChip(r.status), raw: true }
               ], rows.map(r => Object.assign(r, { id: u + '|' + r.m.nama })), { click: true, empty: 'Tidak ada material.' }) + '</section>';
           }).join('') || '<div class="empty">' + ic('stok') + '<p>Belum ada mutasi stok. Gunakan tombol <b>Barang Masuk</b> untuk mencatat stok awal.</p></div>';
@@ -54,6 +55,8 @@ MODS.stok = {
     return { main: low ? low + ' material menipis/habis' : n ? 'Stok terkendali' : 'Catat stok awal', tone: low ? 'warn' : '', sub: n + ' material bermutasi' };
   }
 };
+/* tanggal posisi stok: mutasi terakhir; tanpa tanggal → cut off hari ini */
+function stokPosisi(rows) { return rows.reduce((a, r) => r.last > a ? r.last : a, '') || today(); }
 function matOpts(v, unitKey = 'unit') { return matList(v[unitKey] || 'AMP').map(m => ({ v: m.nama, t: m.nama + ' (' + m.sat + ')' })); }
 function stokForm(jenis, d, pre) {
   const st = stateOf('stok', {});
@@ -144,10 +147,10 @@ async function stokReport(s) {
   units.forEach(u => {
     const rows = stockSaldo(u).filter(r => r.masuk || r.prod || r.keluar || r.adj || s.unit);
     if (!rows.length) return;
-    R.h2('Saldo Stok ' + u + ' — ' + UNIT_NAME[u]);
-    R.table(['No', 'Material', 'Kategori', 'Sat', 'Masuk', 'Keluar', 'Produksi', 'Penyesuaian', 'Saldo', 'Status'],
-      rows.map((r, i) => [i + 1, r.m.nama, r.m.kat, r.m.sat, N_(r.masuk), N_(r.keluar), N_(r.prod), N_(r.adj), { content: N_(r.saldo), styles: { fontStyle: 'bold', halign: 'right' } }, r.status]),
-      { cs: { 0: { halign: 'center', cellWidth: 8 }, 4: right, 5: right, 6: right, 7: right, 8: right } });
+    R.h2('Saldo Stok ' + u + ' — ' + UNIT_NAME[u], 'Posisi per ' + tgl(stokPosisi(rows), true));
+    R.table(['No', 'Material', 'Kategori', 'Sat', 'Masuk', 'Keluar', 'Produksi', 'Penyesuaian', 'Saldo', 'Per Tanggal', 'Status'],
+      rows.map((r, i) => [i + 1, r.m.nama, r.m.kat, r.m.sat, N_(r.masuk), N_(r.keluar), N_(r.prod), N_(r.adj), { content: N_(r.saldo), styles: { fontStyle: 'bold', halign: 'right' } }, r.last ? tgl(r.last) : tgl(today()) + ' (cut off)', r.status]),
+      { cs: { 0: { halign: 'center', cellWidth: 8 }, 4: right, 5: right, 6: right, 7: right, 8: right, 9: { cellWidth: 22 } } });
   });
   let mv = [];
   units.forEach(u => stockMoves(u).forEach(x => inMonth(x.tgl, s.month) && mv.push(Object.assign({ unit: u }, x))));
