@@ -26,3 +26,8 @@ body.embed .mcard[data-pick] .mic{color:var(--bct)}
 .bcpick::after{content:'';position:absolute;right:10px;top:50%;width:6px;height:6px;border-right:2px solid #fff;border-bottom:2px solid #fff;transform:translateY(-70%) rotate(45deg);pointer-events:none}
 .bcpick:focus-within{box-shadow:0 0 0 3px color-mix(in srgb,var(--bct) 30%,transparent)}
 @media (max-width:640px){.bcpick select{padding:2px 22px 2px 8px}}
+/* kelancaran: tanpa blur kaca (repaint berat saat gulir di HP), sentuhan tanpa jeda */
+.top{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;background:var(--bg,#f2f4f7)}
+.mback{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;background:rgba(14,25,42,.5)}
+button,a,label,select,[data-a]{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.tbl-wrap,.twrap,.table-wrap{overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}

@@ -1258,6 +1258,36 @@ main[data-view=bc]{padding:0!important}
 .pjx-k{display:inline-block;padding:0 6px;border-radius:6px;font-size:11px;font-weight:600}
 .pjx-k.e{background:#e7f6ee;color:#17784a}.pjx-k.i{background:#e8f0fb;color:#1f5fae}
 .btn.cmp-go[hidden],.nav.nv-cmp[hidden]{display:none!important}
+/* ---------- kelancaran: scroll & transisi tanpa patah ---------- */
+/* header/nav solid (tanpa blur kaca): blur di atas konten yang digulir = repaint berat tiap frame di HP */
+.top{background:var(--bg);backdrop-filter:none;-webkit-backdrop-filter:none}
+:root[data-theme=dark] .top{background:var(--bg)}
+.bnav{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+dialog::backdrop{background:rgba(14,25,42,.5);backdrop-filter:none;-webkit-backdrop-filter:none}
+/* denyut tombol chat: cincin transform/opacity (GPU), bukan animasi box-shadow (repaint tiap frame) */
+.chat-fab.has{animation:none}
+.chat-fab.has::after{content:'';position:absolute;inset:0;border-radius:50%;border:3px solid color-mix(in srgb,var(--acc) 60%,transparent);pointer-events:none;animation:fab-ring 2.2s ease-out infinite}
+@keyframes fab-ring{0%{transform:scale(1);opacity:.85}70%,100%{transform:scale(1.42);opacity:0}}
+/* sentuhan: tanpa jeda tap & kilat abu-abu; gulir dalam panel tidak menyeret halaman */
+button,a,label,select,summary,[data-a]{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.snav,.cv-l,.c-list,.bp-l,#cm-list,.upanel,.bell-pop{overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.tbl-wrap,.chips.scroll,.stk-t,.lhead .chips{overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}
+.scrim{touch-action:none}
+.side{will-change:transform;touch-action:pan-y}
+@media (min-width:961px){.side{will-change:auto}}
+.bnav button{transition:background-color .2s var(--ease),color .2s var(--ease)}
+.bnav button:active,.snav .nav:active{transform:scale(.97)}
+/* daftar panjang: baris di luar layar tidak dirender sampai mendekat */
+.rrow{content-visibility:auto;contain-intrinsic-size:auto 84px}
+/* Kartu Operasional: iframe tetap hidup (tidak dimuat ulang saat pindah menu) */
+main[data-view=bc]{display:none}
+.bcbox{grid-area:main;min-width:0}
+.bcbox.off{align-self:start;height:0!important;min-height:0!important;overflow:hidden;visibility:hidden;pointer-events:none}
+@media (prefers-reduced-motion:reduce){.chat-fab.has::after{animation:none}}
+@keyframes vin-a{from{opacity:0;transform:translate3d(0,8px,0)}to{opacity:1;transform:none}}
+@keyframes vin-b{from{opacity:0;transform:translate3d(0,8px,0)}to{opacity:1;transform:none}}
+.vin-a{animation:vin-a .23s var(--ease)}.vin-b{animation:vin-b .23s var(--ease)}
+@media (prefers-reduced-motion:reduce){.vin-a,.vin-b{animation:none}}
 </style>
 </head>
 <body>
@@ -3484,6 +3514,23 @@ function vKartu() {
   if (S.bc && !BC_OK(S.bc)) return `<div class="card pad"><h2>Nama basecamp tidak didukung</h2><p class="muted">Kartu Operasional hanya untuk nama basecamp berhuruf/angka (boleh spasi, titik, minus). Pilih basecamp lain di menu kiri.</p></div>`;
   return `<div class="bcwrap"><iframe id="bcf" class="bcf" title="Kartu Operasional ${esc(bcLabel())}" data-bc="${esc(S.bc || '*')}" src="${esc(bcSrc())}"></iframe></div>`;
 }
+var bcOffT = 0;
+function bcShow() { // tampilkan iframe kartu yang sudah ada; buat baru hanya bila belum ada / basecamp berganti
+  const box = $('#bcbox'); if (!box) return;
+  clearTimeout(bcOffT);
+  const want = S.bc || '*'; let f = $('#bcf', box);
+  if (!f || f.dataset.bc !== want) {
+    box.innerHTML = `<iframe id="bcf" class="bcf" title="Kartu Operasional ${esc(bcLabel())}" data-bc="${esc(want)}" src="${esc(bcSrc())}"></iframe>`;
+    f = $('#bcf', box); f.style.opacity = '0';
+    f.addEventListener('load', () => { f.style.transition = 'opacity .25s'; f.style.opacity = '1'; }, { once: true });
+  } else bcFrameSync();
+  if (box.classList.contains('off')) { box.classList.remove('off'); box.inert = false; }
+}
+function bcHide() { // sembunyikan saja (ukuran tetap → tanpa resize/muat ulang); dilepas setelah 15 menit tidak dipakai
+  const box = $('#bcbox'); if (!box || box.classList.contains('off')) return;
+  box.classList.add('off'); box.inert = true;
+  clearTimeout(bcOffT); bcOffT = setTimeout(function drop() { if (S.view === 'bc' || !box.classList.contains('off')) return; if (bcBusy()) { bcOffT = setTimeout(drop, 60e3); return; } box.innerHTML = ''; }, 15 * 60e3);
+}
 function bcFrameSync() { // pindah kartu tanpa memuat ulang iframe (basecamp sama)
   const f = $('#bcf'); if (!f || S.view !== 'bc') return;
   try { const w = f.contentWindow; if (w && w.location.pathname.startsWith('/bc/')) { const h = '#/' + S.bcr; if (w.location.hash !== h && !(h === '#/' && !w.location.hash)) w.location.hash = h; } } catch {}
@@ -3531,7 +3578,7 @@ const KCH = {
 };
 
 // Virtual Work AHG — reminder, global chat (+ whisper), task (+ rutin mingguan) dan kasbon tim. Data di Supabase (proyek ahg-produksi), sinkron real time.
-const BUILD = '20261123-182511';
+const BUILD = '20261123-190300';
 const SB_URL = 'https://herltzublcqpbgyxbbyp.supabase.co', SB_KEY = 'sb_publishable_FMSC0iqDRLsRXtvTtZX0Ow_piPi5bli'; // public key; tables closed, only ahg_* functions
 // File → Google Drive yulius.krisnawan (folder "AHG Produksi", 5 GiB) lewat Edge Function ahg-file: cek login, buka sesi upload Drive
 // (browser kirim byte langsung ke Google), unduh diproksikan per 8 MiB. Cadangan saat Drive terputus: Supabase Storage (bucket ahg-files).
@@ -3707,7 +3754,7 @@ async function syncNow() {
   } catch (e) { S.sync.err = e?.message === 'offline' ? 'offline — tersimpan di perangkat ini' : (e?.message || String(e)); }
   finally { S.sync.busy = false; }
   if (S.sync.again) { S.sync.again = false; return syncNow(); }
-  if (changed) { render(); if (S.view === 'chat' && !document.hidden) markRead(); } else { showSync(); renderUsers(); }
+  if (changed) { renderIdle(); if (S.view === 'chat' && !document.hidden) markRead(); } else { showSync(); renderUsers(); }
   loadStatus();
 }
 // status orang (mis. "Admin Basecamp Bugel : SCP, PCP") lives in ahg_users.status, read via its own RPC every 30 s
@@ -4001,6 +4048,7 @@ function renderShell() { // kerangka gaya Basecamp Bawen: sidebar navy (logo, ba
       <div class="top-r"><div class="clock" id="clock"><b id="clk-t">--:--:--</b><span id="clk-d"></span></div><span class="sync"></span><button type="button" class="bell-btn tools-btn" data-a="toolsBtn" id="tools-btn" title="Tools · aplikasi pendukung">${ico('tools')}</button><button type="button" class="bell-btn" data-a="bellOpen" id="bell-btn" title="Notifikasi"></button><a class="bell-btn help-btn" target="_blank" rel="noopener" href="${esc(WA_HELP)}" title="Bantuan admin via WhatsApp">${ico('help')}</a><button type="button" class="me-btn" data-a="profile" id="me-btn"></button><div class="bell-pop card" id="bell-pop" hidden></div></div>
     </header>
     <main id="main"></main>
+    <div class="bcbox bcwrap off" id="bcbox" inert></div>
     <aside class="upanel" id="users"></aside>
     <nav class="bnav" id="bnav"></nav>
     <button type="button" class="chat-fab" id="chat-fab" data-a="chatFab" title="Global Chat"></button>
@@ -4051,8 +4099,10 @@ function go(v) {
   if (v === 'admin' && !isAdmin()) v = 'reminder';
   if (S.view === 'wait' && v !== 'wait' && W.saveT) gameFlush();
   if (v === 'chat' && S.view !== 'chat') S.chatBack = S.view;
-  if (S.view !== v) { S.view = v; window.scrollTo(0, 0); }
+  const moved = S.view !== v;
+  if (moved) { S.view = v; window.scrollTo(0, 0); }
   render();
+  if (moved) viewIn(); // masuk halaman: fade + geser halus (hanya opacity/transform)
   if (v === 'chat') markRead();
 }
 // re-render keeps typed text, focus and caret in inputs that have an id (unless data-keep="0")
@@ -4067,6 +4117,11 @@ function keep(root, fn) {
 }
 function renderMain() {
   const m = $('#main'); if (!m) return;
+  if (S.view === 'bc' && (!S.bc || BC_OK(S.bc))) { // kartu: iframe tetap hidup di #bcbox — tidak dimuat ulang tiap buka menu
+    if (m.dataset.view !== 'bc') { m.innerHTML = ''; m._h = ''; m.dataset.view = 'bc'; m.dataset.conv = ''; }
+    bcShow(); return;
+  }
+  bcHide();
   const html = ({ home: vHome, reminder: vReminder, chat: vChat, task: vTask, cash: vCash, unit: vUnit, proyeksi: vProyeksi, wait: vWait, tools: vTools, users: vUsersPage, admin: vAdmin, bc: vKartu }[S.view] || vReminder)();
   const sameChat = S.view === 'chat' && m.dataset.view === 'chat' && m.dataset.conv === S.chat.conv && $('#composer', m);
   if (sameChat) { // keep the composer (typing, IME, file picker) — refresh only lists and header
@@ -5482,7 +5537,7 @@ let lastPoll = 0;
 setInterval(() => { if (!S.token) return; const gap = document.hidden ? 30000 : 12000; if (Date.now() - lastPoll >= gap) { lastPoll = Date.now(); syncNow(); } }, 3000);
 setInterval(() => checkDue(), 30000);
 setInterval(checkUpdate, 10 * 60e3);
-setInterval(() => { if (S.me && !dlg().open && !document.activeElement?.matches?.('input,textarea,select')) render(); }, 60000); // refresh "x mnt lalu"
+setInterval(() => { if (S.me && !dlg().open && !document.activeElement?.matches?.('input,textarea,select')) renderIdle(); }, 60000); // refresh "x mnt lalu"
 document.addEventListener('visibilitychange', () => { if (!document.hidden && S.token) { syncNow(); if (S.view === 'chat') markRead(); } });
 window.addEventListener('pagehide', () => { if (W.saveT) gameFlush(); if (S.token) rpc('ahg_away', { p_token: S.token, p_logout: false }, { keepalive: true, once: true }).catch(() => {}); });
 window.addEventListener('online', () => syncNow());
@@ -5625,6 +5680,92 @@ function prNormal(fn) {
 reportPdf = prNormal(reportPdf); reportXlsx = prNormal(reportXlsx); reportPrint = prNormal(reportPrint);
 unitExport = prNormal(unitExport); remExport = prNormal(remExport);
 pjCollect = prNormal(pjCollect); lpCollect = prNormal(lpCollect); lpUnits = prNormal(lpUnits); lpRender = prNormal(lpRender);
+
+// Kelancaran: transisi pindah halaman, render ditunda saat scroll, gesture laci (geser dari tepi kiri), geser kalender.
+// Hanya animasi opacity/transform (dikerjakan GPU) — tidak memicu layout ulang tiap frame.
+// Semua state pakai var/function (skrip digabung jadi satu; boot() di app.js jalan sebelum file ini selesai dibaca).
+var HL = { scrollAt: 0, touch: false, idleT: 0, still: matchMedia('(prefers-reduced-motion: reduce)') };
+var EASE = 'cubic-bezier(.22,.8,.24,1)';
+function anim(el, frames, ms) { if (!el || !HL || HL.still.matches || !el.animate) return; try { el._hl?.cancel(); el._hl = el.animate(frames, { duration: ms, easing: EASE }); } catch {} }
+function viewIn() { // halaman baru masuk: muncul + naik 8px. Ganti nama animasi CSS (vin-a/vin-b) = mulai ulang tanpa paksa layout
+  if (!HL) return;
+  const box = $('#bcbox'), el = S.view === 'bc' && box && !box.classList.contains('off') ? box : $('#main'); if (!el) return;
+  const b = el.classList.contains('vin-a'); el.classList.remove('vin-a', 'vin-b'); el.classList.add(b ? 'vin-b' : 'vin-a');
+}
+// render dari sinkron/timer menunggu scroll & sentuhan selesai → tidak ada patah saat jari sedang menggulir
+function renderIdle() {
+  if (!HL) { render(); return; }
+  clearTimeout(HL.idleT);
+  if (HL.touch || performance.now() - HL.scrollAt < 350) { HL.idleT = setTimeout(renderIdle, 400); return; }
+  render();
+}
+addEventListener('scroll', () => { HL.scrollAt = performance.now(); }, { passive: true, capture: true });
+addEventListener('wheel', () => { HL.scrollAt = performance.now(); }, { passive: true, capture: true });
+
+// ---------- laci menu (≤960px): ikut jari, lepas = buka/tutup ----------
+var DR = null;
+function drawerMode() { return matchMedia('(max-width:960px)').matches && !!S.me && !!$('.shell'); }
+document.addEventListener('touchstart', ev => {
+  HL.touch = true; DR = null;
+  if (ev.touches.length !== 1 || !drawerMode() || dlg().open) return;
+  const t = ev.touches[0], open = document.body.classList.contains('drawer');
+  const side = $('#side'), w = side?.offsetWidth || 264;
+  if (!open && t.clientX > 22) return; // buka: mulai dari tepi kiri layar
+  if (open && !ev.target.closest('#side,.scrim')) return;
+  if (ev.target.closest('input,textarea,select,[contenteditable],.tbl-wrap,.chips.scroll,#cal-days')) return;
+  DR = { x: t.clientX, y: t.clientY, open, w, side, scrim: $('.scrim'), on: false, last: t.clientX, lt: performance.now(), v: 0 };
+}, { passive: true });
+document.addEventListener('touchmove', ev => {
+  if (!DR) return;
+  const t = ev.touches[0], dx = t.clientX - DR.x, dy = t.clientY - DR.y;
+  if (!DR.on) {
+    if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) { DR = null; return; } // gulir vertikal: biarkan
+    if (Math.abs(dx) < 8) return;
+    DR.on = true; DR.side.style.transition = 'none'; DR.scrim.style.transition = 'none';
+    DR.side.style.display = 'flex'; DR.scrim.style.pointerEvents = 'auto';
+  }
+  const now = performance.now(); DR.v = (t.clientX - DR.last) / Math.max(1, now - DR.lt); DR.last = t.clientX; DR.lt = now;
+  const off = Math.min(0, Math.max(-DR.w, (DR.open ? 0 : -DR.w) + dx)); DR.p = 1 + off / DR.w;
+  DR.side.style.transform = `translate3d(${off}px,0,0)`; DR.scrim.style.opacity = DR.p.toFixed(3);
+}, { passive: true }); // pasif: gulir halaman tidak pernah menunggu JS
+function drawerEnd() {
+  HL.touch = false; const d = DR; DR = null;
+  if (!d || !d.on) return;
+  const open = d.v > 0.35 ? true : d.v < -0.35 ? false : d.p > 0.5;
+  // transisi dipasang lagi di perubahan gaya yang sama → meluncur dari posisi jari ke posisi akhir
+  d.side.style.transition = ''; d.scrim.style.transition = '';
+  d.side.style.transform = ''; d.scrim.style.opacity = ''; d.side.style.display = ''; d.scrim.style.pointerEvents = '';
+  document.body.classList.toggle('drawer', open);
+}
+document.addEventListener('touchend', drawerEnd, { passive: true });
+document.addEventListener('touchcancel', drawerEnd, { passive: true });
+
+// ---------- kalender: bulan berganti dengan geser halus ----------
+(function () {
+  const rm = A.remMon;
+  A.remMon = el => { const n = Number(el.dataset.n) || 1; rm(el); anim($('#cal-days'), [{ opacity: 0.2, transform: `translate3d(${n > 0 ? 36 : -36}px,0,0)` }, { opacity: 1, transform: 'none' }], 260); };
+})();
+
+// ---------- dialog: muncul halus ----------
+(function () {
+  const sm = HTMLDialogElement.prototype.showModal;
+  HTMLDialogElement.prototype.showModal = function () { sm.apply(this, arguments); anim(this, [{ opacity: 0, transform: 'translate3d(0,10px,0) scale(.985)' }, { opacity: 1, transform: 'none' }], 200); };
+})();
+
+// ---------- Kartu Operasional: siapkan iframe di belakang (desktop/tablet) supaya buka pertama langsung tampil ----------
+function bcWarm() {
+  const box = $('#bcbox'), c = navigator.connection;
+  if (!box || $('#bcf', box) || S.view === 'bc' || !S.me || (c && (c.saveData || /2g/.test(c.effectiveType || '')))) return;
+  if (S.bc && !BC_OK(S.bc)) return;
+  const want = S.bc || '*';
+  box.innerHTML = `<iframe id="bcf" class="bcf" title="Kartu Operasional ${esc(bcLabel())}" data-bc="${esc(want)}" src="${esc(bcSrc())}"></iframe>`;
+  clearTimeout(bcOffT); bcOffT = setTimeout(function drop() { if (S.view === 'bc' || !box.classList.contains('off')) return; if (bcBusy()) { bcOffT = setTimeout(drop, 60e3); return; } box.innerHTML = ''; }, 15 * 60e3);
+}
+setTimeout(function warm() {
+  if (!S.me || !S.loaded) { setTimeout(warm, 4000); return; }
+  if (!matchMedia('(min-width:821px)').matches) return;
+  (window.requestIdleCallback || (f => setTimeout(f, 1)))(bcWarm, { timeout: 4000 });
+}, 6000);
 </script>
 </body>
 </html>
