@@ -39,6 +39,15 @@ function parseNum(s) {
   const v = parseFloat(s);
   return isFinite(v) ? v : 0;
 }
+// kolom rupiah: titik selalu pemisah ribuan, jadi "2.0000" saat mengetik = 20.000 (bukan 2,0)
+function parseMoney(s) {
+  s = String(s ?? '').trim().replace(/[^\d.,-]/g, '');
+  if ((s.match(/,/g) || []).length > 1) s = s.replace(/\.\d{1,2}$/, ''); else s = s.replace(/,\d*$/, '');
+  const d = s.replace(/\D/g, '');
+  return d ? (s.startsWith('-') ? -1 : 1) * Number(d) : 0;
+}
+// kolom angka: saat disunting tampil tanpa titik ribuan ("2000"), dirapikan lagi setelah selesai
+const numPlain = s => /^-?\d{1,3}(\.\d{3})+(,\d*)?$/.test(s.trim()) ? s.trim().replace(/\./g, '') : s;
 const today = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
 const ymd = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 const BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
@@ -329,28 +338,37 @@ function openForm({ title, sub, fields, value, onSave, onCancel, wide, small, sa
   form.noValidate = true;
   m.body.appendChild(form);
   const visible = f => !f.show || f.show(v);
+  let last = {}, lastKeys = null;
   function render() {
     const fe = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.k : null;
-    form.innerHTML = fields.filter(visible).map(f => fieldHtml(f, v)).join('');
+    const vis = fields.filter(visible), keys = vis.map(f => f.k).join('|');
+    if (keys === lastKeys && form.children.length === vis.length) { // ganti hanya kolom yang berubah, agar kolom yang sedang dituju tidak kehilangan fokus
+      vis.forEach((f, i) => { const h = fieldHtml(f, v); if (h === last[f.k]) return; last[f.k] = h; const el = form.children[i], foc = el.contains(document.activeElement); el.outerHTML = h; if (foc && fe) { const n = form.querySelector('[data-k="' + fe + '"]'); n && n.focus(); } });
+      return;
+    }
+    lastKeys = keys; last = {};
+    form.innerHTML = vis.map(f => last[f.k] = fieldHtml(f, v)).join('');
     if (fe) { const el = form.querySelector('[data-k="' + fe + '"]'); el && el.focus(); }
   }
-  function refreshHtml() { fields.filter(f => f.type === 'html' && visible(f)).forEach(f => { const el = form.querySelector('[data-html="' + f.k + '"]'); if (el && f.html) el.innerHTML = f.html(v); }); }
+  function refreshHtml() { fields.filter(f => f.type === 'html' && visible(f)).forEach(f => { const el = form.querySelector('[data-html="' + f.k + '"]'); if (el && f.html) el.innerHTML = f.html(v); delete last[f.k]; });
+    fields.filter(f => typeof f.help === 'function' && visible(f)).forEach(f => { const el = form.querySelector('[data-f="' + f.k + '"] > small'); if (el) el.textContent = f.help(v); }); }
+  function roCells(t, f, row) { const c = f.cols.filter(x => x.type === 'ro'); t.closest('tr').querySelectorAll('td.ro').forEach((el, i) => { el.textContent = c[i].f ? c[i].f(row) : row[c[i].k] ?? ''; }); }
   render();
   form.addEventListener('input', e => {
     const t = e.target;
-    if (t.dataset.ik !== undefined) { const f = fields.find(x => x.k === t.closest('[data-items]').dataset.items); const row = v[f.k][+t.dataset.i]; row[t.dataset.ik] = t.dataset.num ? parseNum(t.value) : t.value; refreshHtml(); return; }
-    const k = t.dataset.k; if (!k) return;
+    if (t.dataset.ik !== undefined) { const f = fields.find(x => x.k === t.closest('[data-items]').dataset.items); const row = v[f.k][+t.dataset.i]; row[t.dataset.ik] = t.dataset.num ? parseNum(t.value) : t.value; roCells(t, f, row); refreshHtml(); return; }
+    const k = t.dataset.k; if (!k) return; delete last[k];
     const f = fields.find(x => x.k === k);
-    v[k] = t.type === 'checkbox' ? t.checked : t.dataset.num ? (t.value.trim() === '' ? '' : parseNum(t.value)) : t.value;
-    if (f && f.type === 'money' && t.value.trim() !== '') { const pos = t.value.length - t.selectionStart; t.value = nf0.format(parseNum(t.value)); try { t.setSelectionRange(t.value.length - pos, t.value.length - pos); } catch { } }
+    v[k] = t.type === 'checkbox' ? t.checked : t.dataset.num ? (t.value.trim() === '' ? '' : f && f.type === 'money' ? parseMoney(t.value) : parseNum(t.value)) : t.value;
+    if (f && f.type === 'money' && t.value.trim() !== '' && t.value.trim() !== '-') { const pos = t.value.length - t.selectionStart; t.value = nf0.format(v[k]); try { t.setSelectionRange(t.value.length - pos, t.value.length - pos); } catch { } }
     if (f && f.onInput) f.onInput(v, k);
     refreshHtml();
   });
   form.addEventListener('change', async e => {
     const t = e.target;
-    if (t.dataset.ik !== undefined) { const f = fields.find(x => x.k === t.closest('[data-items]').dataset.items); const row = v[f.k][+t.dataset.i]; row[t.dataset.ik] = t.dataset.num ? parseNum(t.value) : t.value; const c = f.cols.find(c => c.k === t.dataset.ik); if (c && c.onChange) { c.onChange(row, v); render(); } refreshHtml(); return; }
-    if (t.dataset.ck) { v[t.dataset.ck] = [...form.querySelectorAll('[data-ck="' + t.dataset.ck + '"]:checked')].map(x => x.value); refreshHtml(); return; }
-    const k = t.dataset.k; if (!k) return;
+    if (t.dataset.ik !== undefined) { const f = fields.find(x => x.k === t.closest('[data-items]').dataset.items); const row = v[f.k][+t.dataset.i]; row[t.dataset.ik] = t.dataset.num ? parseNum(t.value) : t.value; const c = f.cols.find(c => c.k === t.dataset.ik); if (c && c.onChange) { c.onChange(row, v); render(); } else { roCells(t, f, row); last[f.k] = fieldHtml(f, v); } refreshHtml(); return; }
+    if (t.dataset.ck) { delete last[t.dataset.ck]; v[t.dataset.ck] = [...form.querySelectorAll('[data-ck="' + t.dataset.ck + '"]:checked')].map(x => x.value); refreshHtml(); return; }
+    const k = t.dataset.k; if (!k) return; delete last[k];
     const f = fields.find(x => x.k === k);
     if (t.tagName === 'SELECT' && t.value === '__add' && f.add) {
       t.value = v[k] ?? '';
@@ -358,12 +376,15 @@ function openForm({ title, sub, fields, value, onSave, onCancel, wide, small, sa
       if (nv != null && nv !== '') { v[k] = nv; f.onChange && f.onChange(v, k); }
       render(); refreshHtml(); return;
     }
-    v[k] = t.type === 'checkbox' ? t.checked : t.dataset.num ? (t.value.trim() === '' ? '' : parseNum(t.value)) : t.value;
+    v[k] = t.type === 'checkbox' ? t.checked : t.dataset.num ? (t.value.trim() === '' ? '' : f && f.type === 'money' ? parseMoney(t.value) : parseNum(t.value)) : t.value;
     if (t.dataset.num && t.value.trim() !== '') t.value = f && f.type === 'money' ? nf0.format(v[k]) : nf3.format(v[k]);
     if (f && f.onChange) f.onChange(v, k);
     if (fields.some(x => x.show || typeof x.opts === 'function' || x.type === 'items') || (f && f.onChange)) render();
     refreshHtml();
   });
+  const isNumIn = t => t.dataset && t.dataset.num && !(t.dataset.k && (fields.find(x => x.k === t.dataset.k) || {}).type === 'money');
+  form.addEventListener('focusin', e => { const t = e.target; if (isNumIn(t)) { const p = numPlain(t.value); if (p !== t.value) t.value = p; } });
+  form.addEventListener('focusout', e => { const t = e.target; if (isNumIn(t) && t.isConnected && t.value.trim() !== '') t.value = nf3.format(parseNum(t.value)); });
   form.addEventListener('click', e => {
     const sb = e.target.closest('[data-seg] button');
     if (sb) { const k = sb.parentElement.dataset.seg; const f = fields.find(x => x.k === k); v[k] = sb.dataset.v; f.onChange && f.onChange(v, k); render(); refreshHtml(); return; }
