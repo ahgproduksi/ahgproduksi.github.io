@@ -10,6 +10,15 @@
   } else S.user = null;
   // Guide.pdf Basecamp Bawen ada di situs ahgbawen
   document.addEventListener('click', e => { const a = e.target.closest && e.target.closest('a[href="Guide.pdf"]'); if (a) { e.preventDefault(); window.open('https://ahgbawen.github.io/Guide.pdf', '_blank', 'noopener'); } }, true);
+  // form terbuka → beri tahu halaman induk supaya tombol chat mengambang tidak menutupi tombol Simpan/Batal
+  try {
+    const pb = P && window.parent !== window && window.parent.document.body;
+    if (pb) {
+      const mark = () => pb.classList.toggle('bcmodal', !!document.querySelector('.mwrap'));
+      new MutationObserver(mark).observe(document.body, { childList: true }); mark();
+      addEventListener('pagehide', () => pb.classList.remove('bcmodal'));
+    }
+  } catch {}
   if (!CFG.all) return;
 
   /* ---------- Rekap Semua Basecamp ---------- */

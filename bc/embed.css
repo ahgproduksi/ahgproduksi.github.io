@@ -31,3 +31,9 @@ body.embed .mcard[data-pick] .mic{color:var(--bct)}
 .mback{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;background:rgba(14,25,42,.5)}
 button,a,label,select,[data-a]{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 .tbl-wrap,.twrap,.table-wrap{overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}
+/* ruang di bawah daftar: baris terakhir bisa digulir sampai lewat tombol chat mengambang milik halaman induk */
+body.embed{--fabr:84px}
+html{scroll-padding-bottom:100px}
+@media (min-width:641px){
+  body.embed #main > :last-child:not(.pres),body.embed #main > .pres > :last-child{padding-bottom:var(--fabr)}
+}
