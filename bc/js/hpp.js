@@ -1,5 +1,5 @@
 /* Mesin HPP & Price List (mengikuti RAPU-BUASO): parameter, biaya harian, BUASO/BOM, ongkos gendong, harga Loco/Franco/Tergelar.
-   Kartu 13 Price List dan Kartu 14 HPP & BUASO. */
+   Kartu Price List dan Kartu HPP & BUASO. Overhead per unit dihitung di js/overhead.js. */
 'use strict';
 const PARAM_ID = 'prmBawenHPP01'; // id tetap; data per basecamp dipisah di server (bc_docs kunci bc+id)
 const MEMO = { v: -1, m: new Map() };
@@ -15,6 +15,9 @@ function params() {
       if (d.zona && d.zona.length === 10) p.zona = d.zona;
       if (d.gelar) Object.assign(p.gelar, d.gelar);
     }
+    p.oh = ohMerge(); // rincian overhead per unit (js/overhead.js)
+    const od = get(OH_ID);
+    UNITS.forEach(u => { const m = d && d.unit && d.unit[u] && d.unit[u].oh; if (m != null && Math.abs(m - window.PDEF.unit[u].oh) > 1 && !(od && od.unit && od.unit[u])) p.oh.unit[u].manual = +m; });
     return p;
   });
 }
@@ -32,7 +35,7 @@ function dailyOf(u, p) {
     upah: sum(x.upah || [], r => (+r[1] || 0) * (+r[2] || 0)), org: sum(x.upah || [], r => +r[2] || 0),
     bbmL: sum(x.alat || [], r => (+r[1] || 0) * (+r[2] || 0) * (+r[3] || 0)),
     maint: sum(x.maint || [], r => +r[1] || 0) / hariThn, maintThn: sum(x.maint || [], r => +r[1] || 0),
-    sub: +x.sub || 0, oh: +x.oh || 0
+    sub: +x.sub || 0, oh: ohCalc(u, p).hari
   };
 }
 const DAILY0 = {}; UNITS.forEach(u => DAILY0[u] = dailyOf(u, window.PDEF));
@@ -238,17 +241,18 @@ MODS.hpp = {
     if (!UNITS.includes(st.unit)) st.unit = 'AMP';
     return page(root, {
       key: 'hpp', st, report: hppReport,
-      tabs: [{ k: 'rekap', t: 'Rekap HPP' }, { k: 'rinci', t: 'Rincian BUASO & BOM' }, { k: 'param', t: 'Parameter & Biaya Harian' }, { k: 'ongkir', t: 'Ongkos Gendong & Gelar' }],
+      tabs: [{ k: 'rekap', t: 'Rekap HPP' }, { k: 'rinci', t: 'Rincian BUASO & BOM' }, { k: 'param', t: 'Parameter & Biaya Harian' }, { k: 'oh', t: 'Overhead per Unit' }, { k: 'ongkir', t: 'Ongkos Gendong & Gelar' }],
       actions: [{ id: 'g', t: 'Parameter Umum', icon: 'edit' }, { id: 'pl', t: 'Lihat Price List', icon: 'tag' }],
       on: { g: () => HG(paramGlobalForm)(), pl: () => { location.hash = '#/pl'; } },
       filter: s => (s.tab === 'ongkir' ? '' : '<div class="fbar"><div class="seg" data-ps="unit">' + UNITS.map(u => '<button class="' + (s.unit === u ? 'on' : '') + '" data-v="' + u + '">' + u + ' · ' + UNIT_PROD[u] + '</button>').join('') + '</div>' +
         (s.tab === 'rinci' ? '<select data-fk="prod">' + products(s.unit).map(p => '<option' + (s.prod === p.n ? ' selected' : '') + '>' + esc(p.n) + '</option>').join('') + '</select>' : s.tab === 'rekap' ? '<div class="sbox">' + ic('search') + '<input type="search" placeholder="Cari produk…" value="' + esc(s.q || '') + '" data-fk="q"></div>' : '') + '</div>'),
       bindFilter: (el, s, redraw) => $$('[data-ps] button', el).forEach(b => b.onclick = () => { s.unit = b.dataset.v; s.prod = ''; persist('hpp'); redraw(); }),
-      body: s => editBadge('HPP & BUASO') + hppHtml(s),
+      body: s => editBadge('HPP & BUASO') + (s.tab === 'oh' ? ohUnitHtml(s.unit, true) : hppHtml(s)),
       bind: (el, s, fill) => {
         $$('[data-row]', el).forEach(tr => tr.onclick = () => { s.tab = 'rinci'; s.prod = tr.dataset.row; MODS.hpp.render($('#main')); });
         $$('[data-ed]', el).forEach(b => b.onclick = () => HG(paramUnitForm)(s.unit, b.dataset.ed));
         $$('[data-kend]', el).forEach(b => b.onclick = () => HG(kendForm)(b.dataset.kend));
+        ohBind(el, s.unit);
         const g = $('[data-gelar]', el); if (g) g.onclick = () => HG(gelarForm)();
         const zn = $('[data-zona]', el); if (zn) zn.onclick = () => HG(zonaForm)();
         const jm = $('[data-jmf]', el); if (jm) jm.onclick = () => jmfForm(s.unit, s.prod);
@@ -268,7 +272,7 @@ function hppHtml(s) {
         { t: 'Bahan (B)', f: r => rp(r.buaso.B), num: true }, { t: 'Upah (U)', f: r => rp(r.buaso.U), num: true }, { t: 'Alat (A)', f: r => rp(r.buaso.A), num: true }, { t: 'Subkon (S)', f: r => rp(r.buaso.S), num: true }, { t: 'Overhead (O)', f: r => rp(r.buaso.O), num: true },
         { t: 'HPP', f: r => rp(r.cogs), num: true }, { t: 'Bunga', f: r => rp(r.bunga), num: true }, { t: 'HPP + Bunga', f: r => '<b>' + rp(r.hpp) + '</b>', num: true, raw: true },
         { t: 'Loco Eksternal', f: r => rp(r.harga.ext), num: true }
-      ], rows, { click: true }) + '</section>';
+      ], rows, { click: true }) + '</section>' + hppOhMini(u, d, sat);
   }
   if (s.tab === 'rinci') {
     if (!s.prod || !productFind(u, s.prod)) s.prod = (products(u)[0] || {}).n;
@@ -277,22 +281,22 @@ function hppHtml(s) {
     const tot = BUASO.map(([k, n]) => '<tr class="sub"><td></td><td colspan="5">Total ' + n + ' (' + k + ')</td><td class="n">' + rp(c.buaso[k]) + '</td><td></td></tr>').join('');
     return '<section class="card"><div class="chead"><div>' + unitChip(u) + '<h3>Rincian 1 ' + esc(c.sat) + ' ' + esc(c.p.n) + '</h3></div><button class="btn ghost sm" data-jmf>' + ic('edit') + 'Ubah komposisi jobmix</button></div>' +
       '<div class="tbl"><table><thead><tr><th>No</th><th>Uraian</th><th>Komponen</th><th>Satuan</th><th class="n">Koefisien</th><th class="n">Harga Satuan</th><th class="n">Jumlah</th><th>Keterangan</th></tr></thead><tbody>' +
-      rows.map(l => '<tr><td class="c">' + l.no + '</td><td class="strong">' + esc(l.nama) + '</td><td class="c">' + l.komp + '</td><td>' + esc(l.sat) + '</td><td class="n">' + num4(l.koef) + '</td><td class="n">' + rp(l.harga) + '</td><td class="n">' + rp(l.biaya) + '</td><td class="muted wrap">' + esc(l.src || 'Komposisi jobmix') + '</td></tr>').join('') + tot +
+      rows.map(l => '<tr><td class="c">' + l.no + '</td><td class="strong">' + esc(l.nama) + '</td><td class="c">' + l.komp + '</td><td>' + esc(l.sat) + '</td><td class="n">' + num4(l.koef) + '</td><td class="n">' + rp(l.harga) + '</td><td class="n">' + rp(l.biaya) + '</td><td class="muted wrap">' + esc(l.src || 'Komposisi jobmix') + '</td></tr>' + (l.komp === 'O' ? ohShares(u).map(r => '<tr class="ohsub"><td></td><td>' + esc(r.n) + '</td><td class="c">' + r.kode + '</td><td colspan="3">' + rp(r.bln) + ' / bulan (' + pct(r.p) + ' dari overhead)</td><td class="n">' + num(l.biaya * r.p) + '</td><td class="muted">Menu Overhead per Unit</td></tr>').join('') : '')).join('') + tot +
       '<tr class="sub strong"><td></td><td colspan="5">HPP (COGS) = B + U + A + S + O</td><td class="n">' + rp(c.cogs) + '</td><td></td></tr><tr class="sub"><td></td><td colspan="5">Bunga modal kerja (HPP x ' + pct(params().global.bunga) + ' / 12 x ' + num(params().global.masa) + ' bulan)</td><td class="n">' + rp(c.bunga) + '</td><td></td></tr><tr class="grand"><td></td><td colspan="5">HPP + BUNGA</td><td class="n">' + rp(c.hpp) + '</td><td></td></tr></tbody></table></div></section>' +
       '<section class="card"><div class="chead"><h3>Harga jual dari HPP ini</h3></div><div class="kpis sm">' + Object.keys(TIER).map(t => kpi(TIER[t][1], rp(c.harga[t]), 'profit ' + rp(c.harga[t] - c.hpp))).join('') + '</div></section>';
   }
   if (s.tab === 'param') {
     const x = params().unit[u], g = params().global, so = solarInd();
     const blk = (k, title, cols, rows, foot) => '<section class="card"><div class="chead"><h3>' + title + '</h3><button class="btn ghost sm" data-ed="' + k + '">' + ic('edit') + 'Ubah</button></div>' + table(cols, rows.map((r, i) => Object.assign({ id: i }, { r })), { empty: 'Belum ada data.' }) + (foot ? '<div class="cfoot">' + foot + '</div>' : '') + '</section>';
-    return '<section class="card"><div class="chead"><h3>A. Kapasitas produksi & B. Biaya harian → biaya per ' + esc(sat) + '</h3><button class="btn ghost sm" data-ed="kap">' + ic('edit') + 'Ubah kapasitas, overhead, subkon</button></div>' +
+    return '<section class="card"><div class="chead"><h3>A. Kapasitas produksi & B. Biaya harian → biaya per ' + esc(sat) + '</h3><button class="btn ghost sm" data-ed="kap">' + ic('edit') + 'Ubah kapasitas & subkon</button></div>' +
       table([{ t: 'Kode', f: r => r[0] }, { t: 'Komponen', f: r => r[1] }, { t: 'Per hari', f: r => r[2], num: true }, { t: 'Per ' + sat, f: r => r[3], num: true }, { t: 'Sumber', f: r => r[4], cls: 'muted' }],
         [['-', 'Kapasitas terpasang', num(d.kapT) + ' ' + sat, '', 'Target Unit'], ['-', 'Efektivitas mesin', pct(d.ef), '', 'Target Unit'], ['-', 'Kapasitas efektif', num(d.kapEf) + ' ' + sat, '', 'Kapasitas x efektivitas'],
         ['U', 'Upah tenaga kerja (' + num(d.org) + ' orang)', rp(d.upah), rp(d.upah / d.kapEf), 'Rincian upah'], ['A', 'BBM alat produksi - volume', num(d.bbmL) + ' L', num4(d.bbmL / d.kapEf) + ' L', 'Rincian alat'], ['A', 'BBM alat produksi - biaya (Solar Industri ' + rp(so) + '/L)', rp(d.bbmL * so), rp(d.bbmL * so / d.kapEf), 'Kartu Bahan'],
-        ['A', 'Maintenance & sparepart alat', rp(d.maint), rp(d.maint / d.kapEf), 'Rp ' + nf0.format(d.maintThn) + '/tahun / ' + (g.hari * g.bulan) + ' hari'], ['S', 'Subkontraktor', rp(d.sub), rp(d.sub / d.kapEf), 'Isian'], ['O', 'Overhead, opex & depresiasi', rp(d.oh), rp(d.oh / d.kapEf), 'Rekap overhead'],
+        ['A', 'Maintenance & sparepart alat', rp(d.maint), rp(d.maint / d.kapEf), 'Rp ' + nf0.format(d.maintThn) + '/tahun / ' + (g.hari * g.bulan) + ' hari'], ['S', 'Subkontraktor', rp(d.sub), rp(d.sub / d.kapEf), 'Isian'], ['O', 'Overhead, opex & depresiasi', rp(d.oh), rp(d.oh / d.kapEf), 'Rincian overhead di bawah'],
         ['', 'Total U + A + S + O (tanpa bahan)', rp(d.upah + d.bbmL * so + d.maint + d.sub + d.oh), rp((d.upah + d.bbmL * so + d.maint + d.sub + d.oh) / d.kapEf), '']].map((r, i) => Object.assign(r, { id: i }))) + '</section>' +
       '<div class="two">' + blk('upah', 'Rincian upah harian (U)', [{ t: 'Jabatan', f: o => o.r[0] }, { t: 'Upah / OH', f: o => rp(o.r[1]), num: true }, { t: 'Orang', f: o => num(o.r[2]), num: true }, { t: 'Total / hari', f: o => rp(o.r[1] * o.r[2]), num: true }], x.upah || [], 'Total upah per hari: <b>' + rp(d.upah) + '</b>') +
       blk('alat', 'Alat produksi & konsumsi BBM (A)', [{ t: 'Alat', f: o => o.r[0] }, { t: 'Unit', f: o => num(o.r[1]), num: true }, { t: 'L / jam', f: o => num(o.r[2]), num: true }, { t: 'Jam / hari', f: o => num(o.r[3]), num: true }, { t: 'BBM / hari', f: o => num(o.r[1] * o.r[2] * o.r[3]) + ' L', num: true }], x.alat || [], 'Total BBM per hari: <b>' + num(d.bbmL) + ' liter</b> = ' + rp(d.bbmL * so)) + '</div>' +
-      blk('maint', 'Biaya maintenance & sparepart alat per tahun (A)', [{ t: 'Uraian', f: o => o.r[0] }, { t: 'Per tahun', f: o => rp(o.r[1]), num: true }, { t: 'Per hari', f: o => rp(o.r[1] / (g.hari * g.bulan)), num: true }], x.maint || [], 'Total: <b>' + rp(d.maintThn) + '</b> per tahun = ' + rp(d.maint) + ' per hari');
+      blk('maint', 'Biaya maintenance & sparepart alat per tahun (A)', [{ t: 'Uraian', f: o => o.r[0] }, { t: 'Per tahun', f: o => rp(o.r[1]), num: true }, { t: 'Per hari', f: o => rp(o.r[1] / (g.hari * g.bulan)), num: true }], x.maint || [], 'Total: <b>' + rp(d.maintThn) + '</b> per tahun = ' + rp(d.maint) + ' per hari') + hppOhCard(u, d, sat);
   }
   const p = params(), gp = gelarPerTon();
   return '<section class="card"><div class="chead"><h3>A. Zonasi jarak pengiriman</h3><button class="btn ghost sm" data-zona>' + ic('edit') + 'Ubah zona</button></div>' + table([{ t: 'Zona', f: r => 'Zona ' + (r.i + 1) }, { t: 'Jarak (Km)', f: r => (r.i ? p.zona[r.i - 1] : 0) + ' - ' + r.km }, { t: 'Jarak hitung sekali jalan', f: r => r.km + ' Km', num: true }, { t: 'Pulang-pergi', f: r => r.km * 2 + ' Km', num: true }], p.zona.map((km, i) => ({ id: i, i, km }))) +
@@ -305,6 +309,19 @@ function hppHtml(s) {
     p.kend.map(k => '<tr><td class="strong">' + esc(k.nama) + '</td><td>Rp / ' + esc(k.sat) + '</td>' + p.zona.map((_, i) => { const o = ongkir(k, i); return '<td class="n" title="Ritase ' + o.rit + '/hari, BBM ' + num(o.bbmL) + ' L/rit">' + nf0.format(o.total) + '<small>' + o.rit + ' rit</small></td>'; }).join('') + '</tr>').join('') + '</tbody></table></div></section>' +
     '<section class="card"><div class="chead"><h3>D. Biaya gelar hotmix per ton (harga Tergelar AMP)</h3><button class="btn ghost sm" data-gelar>' + ic('edit') + 'Ubah</button></div>' + table([{ t: 'Alat gelar', f: r => r[0] }, { t: 'Unit', f: r => num(r[1]), num: true }, { t: 'BBM (L/ton)', f: r => num4(r[2]), num: true }, { t: 'Sewa / unit / hari', f: r => rp(r[3]), num: true }], (p.gelar.alat || []).map((r, i) => Object.assign([...r], { id: i }))) +
     '<div class="buaso"><div><span>Sewa alat / ton</span><b>' + rp(gp.sewa) + '</b><small>kapasitas gelar ' + num(p.gelar.kap) + ' ton/hari</small></div><div><span>BBM alat / ton</span><b>' + rp(gp.bbm) + '</b><small>' + num(gp.bbmL) + ' L x Solar Industri</small></div><div><span>Upah gelar / ton</span><b>' + rp(gp.upah) + '</b></div><div class="tot"><span>Total biaya gelar</span><b>' + rp(gp.total) + '</b></div></div></section>';
+}
+function hppOhCard(u, d, sat) {
+  const o = ohOf(u), rows = [];
+  o.G.filter(q => q.bln).forEach(q => { rows.push({ id: q.k, h: 1, kode: q.kode, n: q.t + (q.on ? '' : ' (tidak dihitung)'), bln: q.bln }); if (q.k !== 'bersama' && q.on) q.rows.filter(r => r.bln).forEach((r, i) => rows.push({ id: q.k + i, kode: '', n: r.n, bln: r.bln })); });
+  return '<section class="card"><div class="chead"><h3>Rincian overhead harian (O)</h3><button class="btn ghost sm" data-ohgo>' + ic('edit') + 'Rincian & ubah</button></div>' +
+    table([{ t: 'Kode', f: r => r.kode }, { t: 'Uraian', f: r => r.h ? '<b>' + esc(r.n) + '</b>' : esc(r.n), raw: true }, { t: 'Per bulan', f: r => rp(r.bln), num: true }, { t: 'Per hari', f: r => rp(r.bln / o.hariKerja), num: true }, { t: 'Per ' + sat, f: r => num(r.bln / o.hariKerja / (d.kapEf || 1)), num: true }], rows, { empty: 'Belum ada rincian overhead.', rowAttr: r => r.h ? '' : 'class="ohsub"' }) +
+    '<div class="cfoot">Total overhead masuk HPP: <b>' + rp(d.oh) + '</b> per hari = ' + rp(d.oh / (d.kapEf || 1)) + ' per ' + esc(sat) + (o.manual != null ? ' (angka manual)' : '') + '</div></section>';
+}
+function hppOhMini(u, d, sat) {
+  const o = ohOf(u);
+  return '<section class="card"><div class="chead"><h3>Rincian overhead (O) ' + u + ' per ' + esc(sat) + '</h3><button class="btn ghost sm" data-ohgo>' + ic('oh') + 'Menu Overhead per Unit</button></div><div class="buaso">' +
+    o.G.filter(q => q.on && q.bln).map(q => '<div><span>' + esc(q.t) + '</span><b>' + rp(q.hari / (d.kapEf || 1)) + '</b><small>' + rp(q.hari) + ' / hari</small></div>').join('') +
+    '<div class="tot"><span>Total overhead</span><b>' + rp(o.hari / (d.kapEf || 1)) + '</b><small>' + rp(o.hari) + ' / hari' + (o.manual != null ? ' (manual)' : '') + '</small></div></div></section>';
 }
 function paramGlobalForm() {
   const g = params().global;
@@ -326,9 +343,9 @@ function paramUnitForm(u, part) {
   const x = clone(params().unit[u]);
   const setU = data => saveParams(d => { d.unit = d.unit || {}; d.unit[u] = Object.assign({}, d.unit[u], data); });
   if (part === 'kap') return openForm({
-    title: 'Kapasitas & Biaya Harian ' + u, value: { kap: x.kap, ef: x.ef * 100, oh: x.oh, sub: x.sub },
-    fields: [{ k: 'kap', label: 'Kapasitas terpasang per hari', type: 'num', req: true, suffix: u === 'PCP' ? 'M3 beton' : u === 'CMP' ? 'M3' : 'Ton' }, { k: 'ef', label: 'Efektivitas mesin', type: 'num', suffix: '%', req: true }, { k: 'oh', label: 'Overhead, opex & depresiasi per hari', type: 'money' }, { k: 'sub', label: 'Subkontraktor per hari', type: 'money' }],
-    onSave: v => { setU({ kap: +v.kap, ef: v.ef / 100, oh: +v.oh || 0, sub: +v.sub || 0 }); toast('Biaya harian ' + u + ' tersimpan'); }
+    title: 'Kapasitas & Biaya Harian ' + u, value: { kap: x.kap, ef: x.ef * 100, sub: x.sub },
+    fields: [{ k: 'kap', label: 'Kapasitas terpasang per hari', type: 'num', req: true, suffix: u === 'PCP' ? 'M3 beton' : u === 'CMP' ? 'M3' : 'Ton' }, { k: 'ef', label: 'Efektivitas mesin', type: 'num', suffix: '%', req: true }, { k: 'sub', label: 'Subkontraktor per hari', type: 'money' }],
+    onSave: v => { setU({ kap: +v.kap, ef: v.ef / 100, sub: +v.sub || 0 }); toast('Biaya harian ' + u + ' tersimpan'); }
   });
   const cfg = {
     upah: { t: 'Rincian Upah Harian', cols: [{ k: 'a', label: 'Jabatan', w: '50%' }, { k: 'b', label: 'Upah / OH', num: true }, { k: 'c', label: 'Orang', num: true }], map: r => ({ a: r[0], b: r[1], c: r[2] }), back: r => [r.a, +r.b || 0, +r.c || 0] },
@@ -369,13 +386,14 @@ async function hppReport(s) {
   const u = s.unit, d = daily(u), g = params().global, so = solarInd();
   const R = await pdfReport({ title: 'HPP & BUASO ' + UNIT_NAME[u], sub: BC + ' · per ' + tgl(today(), true) + ' · bunga ' + pct(g.bunga) + '/th x ' + g.masa + ' bln', orient: 'l', fname: 'HPP_BUASO_' + u });
   R.kv([['Kapasitas efektif', num(d.kapEf) + ' / hari'], ['Upah / hari', 'Rp ' + R_(d.upah)], ['BBM / hari', num(d.bbmL) + ' L = Rp ' + R_(d.bbmL * so)], ['Maintenance / hari', 'Rp ' + R_(d.maint)], ['Overhead / hari', 'Rp ' + R_(d.oh)], ['Subkon / hari', 'Rp ' + R_(d.sub)], ['Margin BC / Int / Eks', pct(g.mBC) + ' / ' + pct(g.mInt) + ' / ' + pct(g.mExt)], ['Margin transfer', pct(g.mTr)]], 4);
+  ohPdfUnit(R, u);
   R.h2('Rekap HPP per Produk');
   const rows = products(u).map(p => hppCalc(u, p.n));
   R.table(['Produk', 'Sat', 'Bahan', 'Upah', 'Alat', 'Subkon', 'Overhead', 'HPP', 'Bunga', 'HPP+Bunga', 'Loco BC', 'Internal', 'Eksternal'], rows.map(c => [c.p.n, c.sat].concat(['B', 'U', 'A', 'S', 'O'].map(k => cellR(R_(c.buaso[k])))).concat([cellR(R_(c.cogs)), cellR(R_(c.bunga)), { content: R_(c.hpp), styles: { halign: 'right', fontStyle: 'bold' } }, cellR(R_(c.harga.bc)), cellR(R_(c.harga.int)), cellR(R_(c.harga.ext))])), { fs: 6.8 });
   const sel = s.tab === 'rinci' && s.prod ? [hppCalc(u, s.prod)] : rows;
   sel.forEach(c => {
     R.h2('Rincian 1 ' + c.sat + ' ' + c.p.n);
-    R.table(['No', 'Uraian', 'Komp', 'Satuan', 'Koefisien', 'Harga Satuan', 'Jumlah', 'Keterangan'], c.lines.map((l, i) => [i + 1, l.nama, l.komp, l.sat, cellR(num4(l.koef)), cellR(R_(l.harga)), cellR(R_(l.biaya)), l.src || '-']),
+    R.table(['No', 'Uraian', 'Komp', 'Satuan', 'Koefisien', 'Harga Satuan', 'Jumlah', 'Keterangan'], c.lines.map((l, i) => [i + 1, l.nama, l.komp, l.sat, cellR(num4(l.koef)), cellR(R_(l.harga)), cellR(R_(l.biaya)), l.src || '-']).reduce((a, r, i) => { a.push(r); if (c.lines[i].komp === 'O') ohShares(u).forEach(h => a.push(['', '   - ' + h.n, h.kode, '', '', '', cellR(N_(c.lines[i].biaya * h.p)), 'Rp ' + R_(h.bln) + ' / bulan'])); return a; }, []),
       { fs: 7, cs: { 0: { halign: 'center', cellWidth: 8 }, 2: center, 7: { cellWidth: 62 } }, foot: ['', 'HPP ' + R_(c.cogs) + ' + bunga ' + R_(c.bunga), '', '', '', 'HPP + Bunga', cellR(R_(c.hpp)), ''] });
   });
   R.sign([['Dibuat oleh,', S.user.name], ['Diperiksa oleh,', ''], ['Disetujui oleh,', '']]);

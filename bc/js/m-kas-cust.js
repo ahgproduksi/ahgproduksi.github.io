@@ -72,7 +72,7 @@ function kasHtml(s) {
     run = open;
     const rows = ks.filter(k => inMonth(k.tgl, s.month)).map(k => (run += k.arah === 'masuk' ? +k.jumlah : -k.jumlah, Object.assign({ run }, k))).filter(k => qMatch(s.q, k.kat, k.ket, k.pihak, k.metode)).reverse();
     return '<div class="note">Saldo awal ' + monthLabel(s.month) + ': <b>' + rp(open) + '</b> · Saldo akhir: <b>' + rp(run) + '</b></div><section class="card">' + table([
-      { t: 'Tanggal', f: k => tgl(k.tgl) }, { t: 'Uraian', f: k => '<b>' + esc(k.ket || k.kat) + '</b><small>' + esc(k.kat) + (k.inv ? ' · ' + esc((get(k.inv) || {}).no || '') : '') + (k.hutang ? ' · hutang ' + esc((get(k.hutang) || {}).pihak || '') : '') + '</small>', raw: true },
+      { t: 'Tanggal', f: k => tgl(k.tgl) }, { t: 'Uraian', f: k => '<b>' + esc(k.ket || k.kat) + '</b><small>' + esc(k.kat) + (k.ohUnit ? ' · ' + esc(k.ohUnit) + (k.ohItem ? ' · ' + esc(k.ohItem) : '') : '') + (k.inv ? ' · ' + esc((get(k.inv) || {}).no || '') : '') + (k.hutang ? ' · hutang ' + esc((get(k.hutang) || {}).pihak || '') : '') + '</small>', raw: true },
       { t: 'Pihak', f: k => k.pihak || (k.inv ? custName((get(k.inv) || {}).cust) : '-') }, { t: 'Metode', f: k => k.metode || '-' },
       { t: 'Masuk', f: k => k.arah === 'masuk' ? '<b class="t-ok">' + rp(k.jumlah) + '</b>' : '', num: true, raw: true }, { t: 'Keluar', f: k => k.arah === 'keluar' ? '<b class="t-bad">' + rp(k.jumlah) + '</b>' : '', num: true, raw: true },
       { t: 'Saldo', f: k => rp(k.run), num: true }
@@ -129,13 +129,15 @@ function kasForm(d, pre) {
       { k: 'kat', label: 'Kategori', type: 'select', req: true, opts: x => x.arah === 'masuk' ? KAT_MASUK : KAT_KELUAR },
       { k: 'inv', label: 'Untuk invoice', type: 'select', full: true, show: x => x.arah === 'masuk', empty: '— Tanpa invoice —', opts: x => all('inv').filter(i => invStat(i).sisa > 0.5 || i.id === x.inv).map(i => ({ v: i.id, t: i.no + ' · ' + custName(i.cust) + ' · sisa ' + rp(invStat(i).sisa) })), onChange: x => { const i = get(x.inv); if (i) { x.jumlah = invStat(i).sisa; x.kat = 'Pelunasan Invoice'; x.pihak = custName(i.cust); } } },
       { k: 'hutang', label: 'Bayar hutang', type: 'select', full: true, show: x => x.arah === 'keluar', empty: '— Tanpa hutang —', opts: x => all('hutang').filter(h => htStat(h).sisa > 0.5 || h.id === x.hutang).map(h => ({ v: h.id, t: h.pihak + ' · ' + (h.uraian || '') + ' · sisa ' + rp(htStat(h).sisa) })), onChange: x => { const h = get(x.hutang); if (h) { x.jumlah = htStat(h).sisa; x.kat = 'Pembayaran Hutang'; x.pihak = h.pihak; } } },
+      { k: 'ohUnit', label: 'Overhead untuk unit', type: 'select', empty: '— Belum ditandai —', show: x => x.arah === 'keluar' && x.kat === 'Overhead & Operasional', opts: [{ v: 'Bersama', t: 'Bersama (dibagi menurut porsi)' }].concat(UNITS.map(u => ({ v: u, t: u + ' - ' + UNIT_NAME[u] }))), help: 'Masuk ke menu Overhead per Unit › Realisasi Bulanan' },
+      { k: 'ohItem', label: 'Uraian overhead', type: 'list', show: x => x.arah === 'keluar' && x.kat === 'Overhead & Operasional' && !!x.ohUnit, opts: x => ohItemNames(x.ohUnit) },
       { k: 'jumlah', label: 'Jumlah', type: 'money', req: true },
       { k: 'pihak', label: 'Pihak (diterima dari / dibayar kepada)', type: 'list', opts: () => custList().map(c => c.nama).concat(all('supp').map(s => s.nama)) },
       { k: 'metode', label: 'Metode', type: 'select', opts: ['Tunai', 'Transfer Bank', 'Giro / Cek'], empty: false },
       { k: 'ket', label: 'Uraian', type: 'textarea', rows: 2, req: true, def: x => x.inv ? 'Pembayaran ' + ((get(x.inv) || {}).no || '') : '' }
     ],
     onSave: x => {
-      save('kas', { tgl: x.tgl, arah: x.arah, kat: x.kat, jumlah: +x.jumlah, inv: x.arah === 'masuk' ? x.inv || '' : '', hutang: x.arah === 'keluar' ? x.hutang || '' : '', pihak: x.pihak || '', metode: x.metode || '', ket: x.ket || '' }, d && d.id);
+      save('kas', { tgl: x.tgl, arah: x.arah, kat: x.kat, jumlah: +x.jumlah, inv: x.arah === 'masuk' ? x.inv || '' : '', hutang: x.arah === 'keluar' ? x.hutang || '' : '', pihak: x.pihak || '', metode: x.metode || '', ket: x.ket || '', ...(x.arah === 'keluar' && x.kat === 'Overhead & Operasional' && x.ohUnit ? { ohUnit: x.ohUnit, ohItem: x.ohItem || '' } : {}) }, d && d.id);
       toast((x.arah === 'masuk' ? 'Uang masuk ' : 'Uang keluar ') + rp(x.jumlah) + ' dicatat');
     }
   });
