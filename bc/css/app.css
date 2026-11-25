@@ -537,3 +537,17 @@ table.sheetlike td.wrap { min-width: 160px; }
 .tbl tr.ohg td { background: #eef3f9; font-weight: 600; color: var(--navy); }
 .cbtns { display: flex; gap: 8px; flex-wrap: wrap; } .ohn { margin: -4px 0 10px; }
 .chead > div > .chip { margin-left: 8px; }
+/* performance */
+.pfrings { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.pfring { display: flex; align-items: center; gap: 16px; } .pfring svg { width: 118px; height: 118px; flex: none; } .pfring b { display: block; font-size: 15px; color: var(--navy); } .pfring small { display: block; margin-top: 3px; font-size: 12px; line-height: 1.45; color: var(--muted); }
+.pfrt { font-size: 23px; font-weight: 700; fill: #1c2433; }
+.pffbar { justify-content: space-between; } .pfnav { display: flex; align-items: center; gap: 8px; } .pfnav b { min-width: 150px; text-align: center; font-size: 13.5px; } .pfnav button[disabled] { opacity: .35; pointer-events: none; }
+.pfb { display: grid; grid-template-columns: minmax(120px, 190px) minmax(80px, 1fr) 150px 132px; gap: 14px; align-items: center; padding: 8px 6px; border-radius: 9px; transition: background var(--t); } .pfb[data-pfgo]:not([data-pfgo=""]) { cursor: pointer; } .pfb:hover { background: var(--surface2); }
+.pfl { display: flex; align-items: center; gap: 8px; font-size: 13.5px; } .pft { position: relative; height: 18px; border-radius: 0 4px 4px 0; background: #eaf1fa; } .pft i { position: absolute; left: 0; top: 0; bottom: 0; background: #1f5fae; border-radius: 0 4px 4px 0; transition: width .5s cubic-bezier(.2, .7, .2, 1); } .pft em { position: absolute; top: -4px; bottom: -4px; width: 2px; background: #1c2433; } .pft u { position: absolute; top: -7px; margin-left: -5px; border: 5px solid transparent; border-top-color: #66758a; border-bottom: 0; }
+.pfv b { display: block; font-size: 15px; } .pfv small { display: block; font-size: 11.5px; color: var(--muted); white-space: nowrap; } .pfs { text-align: right; }
+.pfkey { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 8px; font-size: 12px; color: var(--muted); } .pfkey span { display: inline-flex; align-items: center; gap: 6px; } .pfkey i { display: inline-block; } .k1 { width: 11px; height: 11px; border-radius: 3px; background: #1f5fae; } .k2 { width: 14px; height: 2px; background: #1c2433; } .k3 { border: 5px solid transparent; border-top-color: #66758a; border-bottom: 0; }
+.pfgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-bottom: 14px; } .pfgrid > .card { margin: 0; } .pfch { min-height: 60px; overflow: hidden; } .pfch svg { display: block; max-width: 100%; } .pfch rect { outline: none; } .pfch rect:hover { fill: rgba(31, 95, 174, .06); }
+.pfa { font-size: 11px; fill: #66758a; } .pfd { font-size: 12px; font-weight: 700; fill: #1c2433; }
+.pfheat td { min-width: 84px; } .pfheat td[data-tip] { font-weight: 600; border: 2px solid #fff; }
+#pftip { position: fixed; z-index: 9999; pointer-events: none; opacity: 0; transition: opacity .12s; max-width: 260px; padding: 8px 11px; border-radius: 9px; background: #0e2744; color: #fff; font-size: 12px; line-height: 1.5; box-shadow: 0 8px 24px rgba(14, 39, 68, .28); } #pftip.on { opacity: 1; }
+@media (max-width: 900px) { .pfrings { grid-template-columns: 1fr; } .pfgrid { grid-template-columns: 1fr; } .pfb { grid-template-columns: 1fr auto; gap: 6px 10px; } .pft { grid-column: 1 / -1; grid-row: 2; } .pfv { grid-row: 1; grid-column: 2; text-align: right; } .pfs { grid-column: 1 / -1; text-align: left; } .pfnav b { min-width: 0; } }
