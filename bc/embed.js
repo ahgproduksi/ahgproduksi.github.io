@@ -103,6 +103,8 @@
       esc(mod ? 'Ringkasan kartu ini di setiap basecamp. Pilih basecamp untuk membuka dan mengisi data.' : 'Ringkasan operasional seluruh basecamp PT. Armada Hada Graha — unit AMP, CMP, SCP, dan PCP.') + '</p></div></div>' +
       '<div class="pact"><button class="btn ghost" data-rf>' + ic('refresh') + '<span>Muat ulang</span></button>' + (r === 'perf' ? '<button class="btn dark" data-pfpdf>' + ic('print') + '<span>Cetak PDF</span></button>' : mod ? '' : '<button class="btn dark" data-pdf>' + ic('print') + '<span>Cetak PDF</span></button>') + '</div></div>';
     if (!bcs.length) { html = head + '<div class="empty">' + ic('home') + '<p>Belum ada basecamp.</p></div>'; put(main, html); return; }
+    if (r === 'flow') { if (main._h !== 'flow' || !APP.ctl) { main._h = 'flow'; main._f = 1; APP.ctl = MODS.flow.render(main); } return; }
+    if (main._f) { main._f = 0; main._h = ''; APP.ctl = null; }
     if (r === 'perf') { pfAllMount(main, head, bcs, R0.data); const rf = $('[data-rf]', main); if (rf) rf.onclick = () => loadAll(true); return; }
     if (mod) {
       html = head + (R0.err ? '<div class="note">' + esc(R0.err) + '</div>' : '') + '<div class="cards">' + bcs.map((bc, i) => {
@@ -131,7 +133,7 @@
       (R0.err ? '<div class="note" style="margin-top:14px">' + esc(R0.err) + '</div>' : '') +
       '<div class="sech"><h2>Per Basecamp</h2><p>Angka dihitung dari Kartu Operasional masing-masing basecamp' + (R0.busy ? ' — memuat data…' : '') + '.</p></div>' +
       '<section class="card flush">' + table(cols, st) + '</section>' +
-      '<div class="sech"><h2>Buka Basecamp</h2><p>Pilih basecamp untuk mengelola 18 kartu operasionalnya.</p></div>' +
+      '<div class="sech"><h2>Buka Basecamp</h2><p>Pilih basecamp untuk mengelola 19 kartu operasionalnya.</p></div>' +
       '<div class="cards">' + st.map(([bc, s], i) => '<a class="mcard" href="#" data-pick="' + esc(bc) + '" style="--d:' + (i * 35) + 'ms;--bct:' + bcTone(bc) + '"><div class="mtop"><span class="mic">' + ic('home') + '</span><em>' + String(i + 1).padStart(2, '0') + '</em></div><h3>Basecamp ' + esc(bc) + '</h3><p>' + (s ? s.docs + ' catatan · ' + s.mp + ' man power aktif' : 'Memuat…') + '</p>' +
         '<div class="mstat ' + (s && s.telat ? 'warn' : '') + '"><b>' + (s ? 'Saldo ' + rpS(s.saldo) : '') + '</b><span>' + (s ? 'Penjualan ' + rpS(s.jual) + ' bulan ini' : '') + '</span></div><span class="mgo">Buka basecamp' + ic('right') + '</span></a>').join('') + '</div>';
     put(main, html);

@@ -3418,6 +3418,7 @@ const IK = {
   help: '<circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.1-2.4 3.6"/><path d="M12 17v.2"/>',
   in: '<path d="M12 4v12"/><path d="m7 11 5 5 5-5"/><path d="M4 20h16"/>',
   out: '<path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 20h16"/>',
+  flow: '<rect x="8.5" y="2.5" width="7" height="4.5" rx="1.2"/><path d="m12 9.5 3.6 3-3.6 3-3.6-3 3.6-3Z"/><path d="M12 7v2.5M12 15.5v2"/><rect x="8.5" y="17.5" width="7" height="4" rx="2"/><path d="M15.6 12.5H20v7h-4.5"/>',
   perf: '<path d="M4 20V4"/><path d="M4 20h16"/><path d="M8 16v-4M12 16V8M16 16v-6"/><path d="m7 8 4-3.5 3 2L19 3"/>',
   oh: '<path d="M4 20V9l5-4v15M9 20h11V11H9"/><path d="M12.5 14.5h4M12.5 17h4M6.3 11.5h.4M6.3 15h.4"/><path d="M2.5 20h19"/>',
   scale: '<path d="M12 4v16M5 20h14"/><path d="M4 8h16"/><path d="m4 8-2.5 6a3 3 0 0 0 5 0L4 8ZM20 8l-2.5 6a3 3 0 0 0 5 0L20 8Z"/>',
@@ -3515,12 +3516,12 @@ function ikonInit() {
     .observe(document.body, { childList: true, subtree: true, characterData: true });
 }
 
-// Kartu Operasional per basecamp (18 kartu Basecamp Bawen) + pilihan basecamp global.
+// Kartu Operasional per basecamp (19 kartu Basecamp Bawen) + pilihan basecamp global.
 // Kartu tampil di <iframe> /bc/?bc=<basecamp>#/<kartu> (kode modul situs ahgbawen, data lewat fungsi bc_* dengan sesi Virtual Work).
 // 'Bawen' = data live ahgbawen.github.io; basecamp lain = data sendiri; '' (Semua Basecamp) = rekap semua basecamp.
 const KARTU = [['stok', 'Stok Material', 'stok'], ['prod', 'Produksi', 'prod'], ['perf', 'Performance', 'perf'], ['jual', 'Penjualan', 'jual'], ['proj', 'Kartu Project', 'proj'], ['kas', 'Cash Flow Unit', 'kas'], ['cust', 'Customer Unit', 'cust'],
   ['jadwal', 'Jadwal Pengiriman', 'jadwal'], ['bahan', 'Bahan & Supplier', 'bahan'], ['mt', 'Maintenance Alat', 'mt'], ['bppb', 'BPPB', 'bppb'], ['mp', 'Man Power', 'mp'],
-  ['mkt', 'Marketing', 'mkt'], ['dev', 'Pengembangan Basecamp', 'dev'], ['pl', 'Price List', 'tag'], ['hpp', 'HPP & BUASO', 'scale'], ['oh', 'Overhead per Unit', 'oh'], ['org', 'Struktur Organisasi', 'org']];
+  ['mkt', 'Marketing', 'mkt'], ['dev', 'Pengembangan Basecamp', 'dev'], ['pl', 'Price List', 'tag'], ['hpp', 'HPP & BUASO', 'scale'], ['oh', 'Overhead per Unit', 'oh'], ['org', 'Struktur Organisasi', 'org'], ['flow', 'Flow Chart', 'flow']];
 const VICON = { home: 'grid', reminder: 'alarm', chat: 'chat', task: 'task', cash: 'kas', unit: 'prod', proyeksi: 'cal', wait: 'game', tools: 'tools', users: 'users', admin: 'crown', bc: 'basecamp' };
 const BC_OK = b => /^[A-Za-z0-9][A-Za-z0-9 ._-]{1,39}$/.test(b || '');
 const bcLabel = () => S.bc ? 'Basecamp ' + S.bc : 'Semua Basecamp';
@@ -3599,7 +3600,7 @@ const KCH = {
 };
 
 // Virtual Work AHG — reminder, global chat (+ whisper), task (+ rutin mingguan) dan kasbon tim. Data di Supabase (proyek ahg-produksi), sinkron real time.
-const BUILD = '20261125-230309';
+const BUILD = '20261125-234753';
 const SB_URL = 'https://herltzublcqpbgyxbbyp.supabase.co', SB_KEY = 'sb_publishable_FMSC0iqDRLsRXtvTtZX0Ow_piPi5bli'; // public key; tables closed, only ahg_* functions
 // File → Google Drive yulius.krisnawan (folder "AHG Produksi", 5 GiB) lewat Edge Function ahg-file: cek login, buka sesi upload Drive
 // (browser kirim byte langsung ke Google), unduh diproksikan per 8 MiB. Cadangan saat Drive terputus: Supabase Storage (bucket ahg-files).

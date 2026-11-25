@@ -1,6 +1,6 @@
 /* Basecamp Bawen — login/daftar, kerangka aplikasi, navigasi, beranda, pengguna. */
 'use strict';
-const ORDER = ['stok', 'prod', 'perf', 'jual', 'proj', 'kas', 'cust', 'jadwal', 'bahan', 'mt', 'bppb', 'mp', 'mkt', 'dev', 'pl', 'hpp', 'oh', 'org'];
+const ORDER = ['stok', 'prod', 'perf', 'jual', 'proj', 'kas', 'cust', 'jadwal', 'bahan', 'mt', 'bppb', 'mp', 'mkt', 'dev', 'pl', 'hpp', 'oh', 'org', 'flow'];
 const APP = { route: '', ctl: null };
 const helpLink = (t = 'Halo Admin, saya butuh bantuan untuk aplikasi ' + BC + '.') => waLink(ADMIN_WA, t);
 

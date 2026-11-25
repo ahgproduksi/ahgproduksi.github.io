@@ -10,11 +10,11 @@ async function pdfLogo() {
 const NAVY = [20, 54, 95], RED = [198, 40, 40], INK = [28, 36, 51], MUTED = [96, 108, 124], LINE = [214, 221, 230];
 function pdfClean(s) { return String(s ?? '').replace(/[^\x09\x0A\x0D\x20-\x7E\xA0-\xFF]/g, c => ({ '–': '-', '—': '-', '‘': "'", '’': "'", '“': '"', '”': '"', '…': '...', '≥': '>=', '≤': '<=', '·': '-' }[c] ?? '')); }
 
-async function pdfReport({ title, sub, orient = 'p', fname }) {
+async function pdfReport({ title, sub, orient = 'p', fname, format = 'a4' }) {
   if (!window.jspdf) { toast('Pustaka PDF belum termuat, periksa koneksi internet', 'err'); throw new Error('nopdf'); }
   const logo = await pdfLogo();
   const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ orientation: orient, unit: 'mm', format: 'a4', compress: true });
+  const doc = new jsPDF({ orientation: orient, unit: 'mm', format, compress: true });
   const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight();
   const M = 14, TOP = 34, BOT = 16;
   let y = TOP + 2;
