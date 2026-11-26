@@ -1307,6 +1307,43 @@ html{scroll-padding-bottom:100px}
 }
 /* form Kartu Operasional (modal di iframe) terbuka → tombol mengambang disembunyikan supaya tidak menutupi tombol Simpan/Batal */
 body.bcmodal main[data-view=bc] ~ .chat-fab{visibility:hidden}
+
+/* ---- Task › Link Kerja Proyek: daftar link + keterangan ---- */
+.links .lk-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.links .lk-top .lk-h{flex:0 1 auto}
+.links .lk-top .sp{flex:1}
+.links #lk-fp{max-width:220px;height:34px;font-size:13px}
+.links .lk-q{width:220px;height:34px;font-size:13px}
+.lkt{border:1px solid var(--line);border-radius:12px;overflow:auto;max-height:min(460px,55vh);background:var(--card)}
+.lkr{display:grid;grid-template-columns:minmax(200px,1.1fr) minmax(220px,2fr) minmax(150px,.8fr) 40px;gap:12px;align-items:center;padding:9px 12px;border-top:1px solid var(--line)}
+.lkr:hover{background:var(--soft)}
+.lkr-hd{position:sticky;top:0;z-index:2;border-top:0;background:var(--soft);font-size:11.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);padding:7px 12px}
+.lkp-h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 12px;border-top:1px solid var(--line);background:color-mix(in srgb,var(--acc) 7%,transparent);font-weight:700;font-size:13px}
+.lkr-a{display:flex;align-items:center;gap:9px;min-width:0;text-decoration:none;color:var(--text)}
+.lkr-a img{width:18px;height:18px;border-radius:4px;flex:none}
+.lkr-t{display:flex;flex-direction:column;min-width:0}
+.lkr-t b{font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lkr-t small{font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lkr-a:hover b{color:var(--acc);text-decoration:underline}
+.lkr-n{font-size:13px;line-height:1.45;white-space:pre-wrap;word-break:break-word;min-width:0}
+.lkr-w{display:flex;align-items:center;gap:8px;min-width:0}
+.lkr-w>span{display:flex;flex-direction:column;min-width:0}
+.lkr-w b{font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lkr-w small{font-size:11px}
+.lkr-x{display:flex;justify-content:flex-end}
+.lkr-lock{opacity:.45;padding-right:8px}
+.lk-empty{padding:6px 2px}
+.links .lk-add{grid-template-columns:1.4fr 1fr 1fr 1.6fr auto}
+@media (max-width:820px){
+  .links .lk-top .sp{display:none}
+  .links #lk-fp,.links .lk-q{flex:1 1 140px;max-width:none;width:auto}
+  .lkt{max-height:60vh}
+  .lkr-hd{display:none}
+  .lkr{grid-template-columns:1fr auto;grid-template-areas:"a x" "n n" "w w";gap:6px 10px;padding:10px 12px}
+  .lkr-a{grid-area:a}.lkr-n{grid-area:n}.lkr-w{grid-area:w}.lkr-x{grid-area:x}
+  .links .lk-add{grid-template-columns:1fr 1fr}
+  .links .lk-add #lk-url,.links .lk-add #lk-note,.links .lk-add button{grid-column:1/-1}
+}
 </style>
 </head>
 <body>
@@ -3624,7 +3661,7 @@ const KCH = {
 };
 
 // Virtual Work AHG — reminder, global chat (+ whisper), task (+ rutin mingguan) dan kasbon tim. Data di Supabase (proyek ahg-produksi), sinkron real time.
-const BUILD = '20261126-223321';
+const BUILD = '20261126-224607';
 const SB_URL = 'https://herltzublcqpbgyxbbyp.supabase.co', SB_KEY = 'sb_publishable_FMSC0iqDRLsRXtvTtZX0Ow_piPi5bli'; // public key; tables closed, only ahg_* functions
 // File → Google Drive yulius.krisnawan (folder "AHG Produksi", 5 GiB) lewat Edge Function ahg-file: cek login, buka sesi upload Drive
 // (browser kirim byte langsung ke Google), unduh diproksikan per 8 MiB. Cadangan saat Drive terputus: Supabase Storage (bucket ahg-files).
@@ -3689,7 +3726,7 @@ const S = {
   view: 'reminder',
   rem: { mode: ['list', 'board', 'cal'].includes(LS.get('remMode')) ? LS.get('remMode') : 'list', pick: '', open: {}, cal: true, y: now0.getFullYear(), m: now0.getMonth(), sel: '', addDate: '', st: 'open', scope: 'all', who: '', sort: 'date' },
   chat: { conv: 'g', files: [], limit: 200, sending: false },
-  task: { files: null, fq: '', links: false, tab: 'all', q: '', who: '', week: 0, layout: LS.get('task.layout') || 'grid' },
+  task: { files: null, fq: '', links: true, lq: '', lp: '', tab: 'all', q: '', who: '', week: 0, layout: LS.get('task.layout') || 'grid' },
   unit: { cat: 'produksi', p: 'month', ref: today(), from: '', to: '', bc: '', u: '', mk: '', q: '' },
   cash: { cat: '', p: 'month', ref: today(), from: '', to: '', q: '', who: '' },
   rep: null, sync: { busy: false, again: false, at: null, err: '' }, dlg: null,
@@ -4485,17 +4522,13 @@ function taskList() {
   return l.sort((a, b) => (P.includes(b.id) - P.includes(a.id)) || b.updated - a.updated);
 }
 function vTask() {
-  const T = S.task, links = live('link').sort((a, b) => a.created - b.created), P = pins(), me = S.me.name;
+  const T = S.task, P = pins(), me = S.me.name;
   const all = live('task').filter(t => !t.data.archived);
   const n = { all: all.filter(t => t.data.status !== 'done' || P.includes(t.id)).length, pin: all.filter(t => P.includes(t.id)).length, routine: all.filter(t => t.data.routine?.on).length, mine: all.filter(t => t.owner === me).length, assigned: all.filter(t => t.data.assign === me).length, done: all.filter(t => t.data.status === 'done').length, archive: live('task').filter(t => t.data.archived).length };
   const tabs = [['all', '📋 Aktif'], ['pin', '📌 Disematkan'], ['routine', '🔁 Rutin mingguan'], ['assigned', '🙋 Untukku'], ['mine', '✍️ Buatanku'], ['done', '✔ Selesai'], ['archive', '🗄 Arsip']];
   const owners = [...new Set(live('task').map(t => t.owner))];
   return `<div class="head"><h1>✅ Task</h1><div class="tools"><button type="button" class="btn files-btn ${T.tab === 'files' ? 'on' : ''}" data-a="taskFiles">📎 Files${T.files ? ` <span class="fb-n">${T.files.length}</span>` : ''}</button><button type="button" class="btn primary" data-a="taskNew">＋ Task baru</button></div></div>
-  ${T.tab === 'files' ? vFiles() : `<section class="card links ${T.links ? 'open' : ''}">
-    <button type="button" class="lk-h" data-a="linksTog"><b>🔗 Link kerja</b><span class="muted small">${links.length} link</span><span class="sp"></span><span class="tg">${T.links ? '⌃' : '⌄'}</span></button>
-    ${T.links ? `<div class="lk-l">${links.map(l => `<span class="lk${fl(l.id)}" ${nfa(l.id)}><a href="${esc(l.data.url)}" target="_blank" rel="noopener" title="${esc(l.data.url)}"><img src="https://www.google.com/s2/favicons?domain=${encodeURIComponent(host(l.data.url))}&sz=32" alt="" loading="lazy"><span>${esc(l.data.title || host(l.data.url))}</span></a>${canEdit(l) ? `<button type="button" class="x" data-a="linkDel" data-id="${l.id}" title="Hapus link">✕</button>` : ''}</span>`).join('') || '<span class="muted small">Belum ada link. Spreadsheet, Docs, Drive, dll — terlihat semua anggota.</span>'}</div>
-    <form class="lk-add" id="link-add"><input id="lk-url" placeholder="Tempel link (https://docs.google.com/…)" required><input id="lk-title" placeholder="Nama link (opsional)" maxlength="80"><button class="btn" type="submit">＋ Link</button></form>` : ''}
-  </section>
+  ${T.tab === 'files' ? vFiles() : `${vLinks()}
   <div class="tf ${T.tab === 'routine' ? 'rt' : ''}">
     <select id="t-tab" data-ch="taskTabSel" data-keep="0" class="t-tab">${tabs.map(([k, l]) => `<option value="${k}" ${T.tab === k ? 'selected' : ''}>${l} (${n[k]})</option>`).join('')}</select>
     ${T.tab !== 'routine' ? `<select id="t-who" data-ch="taskWho" data-keep="0"><option value="">Semua pembuat</option><option value="@me" ${T.who === '@me' ? 'selected' : ''}>📣 Menandai saya</option>${owners.map(o => `<option value="${esc(o)}" ${T.who === o ? 'selected' : ''}>${esc(uname(o))}</option>`).join('')}</select><button type="button" class="ib" data-a="taskLayout" title="Tampilan">${T.layout === 'grid' ? '☰' : '▦'}</button>
@@ -4503,6 +4536,50 @@ function vTask() {
   </div>
   ${T.tab === 'routine' ? vRoutine() : (() => { const l = taskList(); return `<button type="button" class="quick" data-a="taskNew">Tulis task baru…<span>＋</span></button>
     ${l.length ? `<div class="grid ${T.layout}">${l.map(taskCard).join('')}</div>` : '<p class="empty">Tidak ada task di sini.</p>'}`; })()}`}`;
+}
+// ---------- TASK › Link Kerja: daftar link proyek + keterangan (semua anggota lihat, pembuat/admin ubah) ----------
+const lkProj = l => (l.data.proj || '').trim();
+const lkProjs = () => [...new Set(live('link').map(lkProj).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'id'));
+const lkFav = u => `<img src="https://www.google.com/s2/favicons?domain=${encodeURIComponent(host(u))}&sz=32" alt="" loading="lazy">`;
+function lkRow(l) {
+  const d = l.data, ed = canEdit(l), chg = l.updated && l.created && l.updated - l.created > 60000;
+  return `<div class="lkr${fl(l.id)}" ${nfa(l.id)}>
+    <a class="lkr-a" href="${esc(d.url)}" target="_blank" rel="noopener" title="${esc(d.url)}">${lkFav(d.url)}<span class="lkr-t"><b>${esc(d.title || host(d.url))}</b><small data-raw>${esc(host(d.url))}</small></span></a>
+    <div class="lkr-n">${d.note ? linkify(d.note) : '<span class="muted">Belum ada keterangan</span>'}</div>
+    <div class="lkr-w">${av(l.owner, 'xs')}<span><b>${esc(uname(l.owner))}</b><small class="muted">${chg ? 'Diubah ' + ago(l.updated) : ago(l.created)}</small></span></div>
+    <div class="lkr-x">${ed ? `<button type="button" class="ib" data-a="linkEdit" data-id="${l.id}" title="Ubah link">✏️</button>` : `<span class="lkr-lock muted small" title="Hanya pembuat link yang dapat mengubah">🔒</span>`}</div>
+  </div>`;
+}
+function vLinks() {
+  const T = S.task, all = live('link'), projs = lkProjs(), q = T.lq.trim().toLowerCase();
+  let l = all;
+  if (T.lp === '@me') l = l.filter(x => x.owner === S.me.name); else if (T.lp === '@none') l = l.filter(x => !lkProj(x)); else if (T.lp) l = l.filter(x => lkProj(x) === T.lp);
+  if (q) l = l.filter(x => [x.data.title, x.data.url, x.data.proj, x.data.note, uname(x.owner)].join(' ').toLowerCase().includes(q));
+  const groups = new Map();
+  for (const x of l.sort((a, b) => (lkProj(a) || '￿').localeCompare(lkProj(b) || '￿', 'id') || (a.data.title || host(a.data.url)).localeCompare(b.data.title || host(b.data.url), 'id'))) {
+    const k = lkProj(x); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(x);
+  }
+  const body = !all.length ? '<p class="muted small lk-empty">Belum ada link. Tambahkan link Spreadsheet, Docs, Drive, dll beserta proyek & keterangannya — terlihat semua anggota.</p>'
+    : !l.length ? '<p class="muted small lk-empty">Tidak ada link yang cocok.</p>'
+    : `<div class="lkt"><div class="lkr lkr-hd"><span>Link</span><span>Keterangan</span><span>Pembuat</span><span></span></div>${[...groups].map(([k, xs]) => `<div class="lkp"><div class="lkp-h"><span>📁 ${esc(k || 'Tanpa proyek')}</span><span class="muted small">${xs.length} link</span></div>${xs.map(lkRow).join('')}</div>`).join('')}</div>`;
+  return `<section class="card links ${T.links ? 'open' : ''}">
+    <div class="lk-top"><button type="button" class="lk-h" data-a="linksTog"><b>🔗 Link Kerja Proyek</b><span class="muted small">${all.length} link · ${projs.length} proyek</span><span class="tg">${T.links ? '⌃' : '⌄'}</span></button>
+    ${T.links && all.length ? `<span class="sp"></span><select id="lk-fp" data-ch="linkProjSel" data-keep="0"><option value="">Semua proyek</option>${projs.map(p => `<option value="${esc(p)}" ${T.lp === p ? 'selected' : ''}>${esc(p)}</option>`).join('')}<option value="@none" ${T.lp === '@none' ? 'selected' : ''}>Tanpa proyek</option><option value="@me" ${T.lp === '@me' ? 'selected' : ''}>✍️ Link buatanku</option></select><input id="lk-q" class="lk-q" placeholder="🔍 Cari link…" data-ch="linkQ" value="${esc(T.lq)}">` : ''}</div>
+    ${T.links ? `${body}
+    <form class="lk-add" id="link-add"><input id="lk-url" placeholder="Tempel link (https://docs.google.com/…)" required><input id="lk-title" placeholder="Nama link" maxlength="80"><input id="lk-proj" placeholder="Proyek (mis. Pemeliharaan Kota Magelang)" maxlength="80" list="lk-projs"><input id="lk-note" placeholder="Keterangan: isi / kegunaan link" maxlength="500"><button class="btn primary" type="submit">＋ Link</button><datalist id="lk-projs">${projs.map(p => `<option value="${esc(p)}">`).join('')}</datalist></form>` : ''}
+  </section>`;
+}
+function linkDialog(l) {
+  const d = l.data;
+  S.dlg = { type: 'link', id: l.id };
+  openDlg(`<form class="dlg" id="link-edit" data-id="${l.id}"><h2>Ubah link kerja</h2>
+    <label>Link (URL)<input id="le-url" value="${esc(d.url)}" required data-raw></label>
+    <label>Nama link<input id="le-title" value="${esc(d.title || '')}" maxlength="80"></label>
+    <label>Proyek<input id="le-proj" value="${esc(d.proj || '')}" maxlength="80" list="le-projs"><datalist id="le-projs">${lkProjs().map(p => `<option value="${esc(p)}">`).join('')}</datalist></label>
+    <label>Keterangan<textarea id="le-note" rows="4" maxlength="500">${esc(d.note || '')}</textarea></label>
+    <p class="muted small">Dibuat oleh ${esc(uname(l.owner))} · ${dtText(l.created)}${l.updated - l.created > 60000 ? ' · diubah ' + dtText(l.updated) : ''}</p>
+    <div class="dlg-f"><button type="button" class="btn danger" data-a="linkDel" data-id="${l.id}">Hapus</button><span class="sp"></span><button type="button" class="btn" data-a="close">Batal</button><button class="btn primary" type="submit">Simpan</button></div>
+  </form>`);
 }
 // ---------- TASK › Files (perpustakaan dokumen: semua file yang pernah diupload) ----------
 const canFile = f => isAdmin() || f.owner === S.me.name; // rename / hapus: pemilik atau admin (server juga memeriksa)
@@ -5359,7 +5436,8 @@ const A = {
   routineCk: el => { const id = ckId(el.dataset.id, el.dataset.d), c = S.items.get(id), on = !(c && !c.deleted && c.data.on);
     if (c) put({ ...c, deleted: false, data: { ...c.data, on, by: S.me.name, at: srvNow() } }); else put({ id, kind: 'check', owner: S.me.name, to: null, data: { task: el.dataset.id, date: el.dataset.d, on: true, by: S.me.name, at: srvNow() }, created: 0, updated: 0, deleted: false }); },
   weekNav: el => { const n = Number(el.dataset.n); S.task.week = n === 0 ? 0 : S.task.week + n; renderMain(); },
-  linkDel: async el => { const l = S.items.get(el.dataset.id); if (await confirmDlg(`Hapus link <b>${esc(l.data.title || l.data.url)}</b>?`, 'Hapus')) remove(l.id); },
+  linkDel: async el => { const l = S.items.get(el.dataset.id); if (!l || !canEdit(l)) return; if (await confirmDlg(`Hapus link <b>${esc(l.data.title || l.data.url)}</b>?`, 'Hapus')) { remove(l.id); closeAll(); } },
+  linkEdit: el => { const l = S.items.get(el.dataset.id); if (l && canEdit(l)) linkDialog(l); },
   // cash
   cashNew: el => cashDialog(null, el.dataset.t),
   cashEdit: el => cashDialog(S.items.get(el.dataset.id)),
@@ -5410,6 +5488,8 @@ const CH = { // change / input handlers
   cFile: el => { addPending([...el.files]); el.value = ''; },
   cText: (el, ev) => { if (ev.type === 'input') { autoGrow(el); mentionCheck(el); } },
   taskQ: (el, ev) => { if (ev.type === 'input') { S.task.q = el.value; renderMain(); } },
+  linkQ: (el, ev) => { if (ev.type === 'input') { S.task.lq = el.value; renderMain(); } },
+  linkProjSel: el => { S.task.lp = el.value; renderMain(); },
   taskTabSel: el => { S.task.tab = el.value; renderMain(); },
   flQ: el => { S.task.fq = el.value; renderMain(); const i = $('#fl-q'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } },
   flUpload: async el => {
@@ -5516,7 +5596,13 @@ document.addEventListener('submit', async ev => {
   } else if (f.id === 'composer') sendMsg();
   else if (f.id === 'link-add') {
     const url = normUrl($('#lk-url').value); if (!/^https?:\/\/[^\s]+\.[^\s]+/.test(url)) { toast('Link tidak valid.', 'warn'); return; }
-    create('link', { url, title: $('#lk-title').value.trim() }); $('#lk-url').value = ''; $('#lk-title').value = ''; renderMain();
+    create('link', { url, title: $('#lk-title').value.trim(), proj: $('#lk-proj').value.trim(), note: $('#lk-note').value.trim() }); ['#lk-url', '#lk-title', '#lk-note'].forEach(k => $(k).value = ''); renderMain();
+    toast('Link ditambahkan.', 'info', null, 2000);
+  } else if (f.id === 'link-edit') {
+    const l = S.items.get(f.dataset.id); if (!l || !canEdit(l)) { closeAll(); return; }
+    const url = normUrl($('#le-url').value); if (!/^https?:\/\/[^\s]+\.[^\s]+/.test(url)) { toast('Link tidak valid.', 'warn'); return; }
+    patch(l.id, { url, title: $('#le-title').value.trim(), proj: $('#le-proj').value.trim(), note: $('#le-note').value.trim() }); closeAll();
+    toast('Link disimpan.', 'info', null, 2000);
   } else if (f.id === 'task-form') {
     const id = S.dlg?.id, t = id ? S.items.get(id) : null, v = readTaskForm();
     if (v.routine.on && !v.routine.days.length) { toast('Pilih hari untuk pekerjaan rutin.', 'warn'); return; }
@@ -5654,7 +5740,7 @@ function prCodes() { // kode unit buatan user (mis. BP) tetap kapital
 
 // ---- layar: teks, placeholder, title, nilai isian ----
 const PR_SKIP = 'script,style,textarea,noscript,code,pre,svg,#print-area,[data-raw],[data-a="openFile"],.pf,.vw-h';
-const PR_RAW_ID = /^(l-user|l-pass2?|l-ref|lk-url|tf-link|fl-name|pw-old|pw-new2?|uf-un-sat|sf-sat-new)$/;
+const PR_RAW_ID = /^(l-user|l-pass2?|l-ref|lk-url|le-url|tf-link|fl-name|pw-old|pw-new2?|uf-un-sat|sf-sat-new)$/;
 function prEditable(el) {
   if (!el || el.readOnly || el.dataset.raw != null || PR_RAW_ID.test(el.id)) return false;
   if (el.tagName === 'TEXTAREA') return true;
