@@ -84,11 +84,56 @@ function pfEvents(src) {
   });
   return { ev, miss };
 }
-function pfTarget(u, doc) { // { w, m, y, auto }
-  const d = daily(u), g = params().global, x = doc && doc.unit && doc.unit[u] || {}, m0 = d.kapEf * (+g.hari || 25);
-  const m = +x.m > 0 ? +x.m : m0;
-  return { m, w: +x.w > 0 ? +x.w : m / 4, y: +x.y > 0 ? +x.y : m * (+g.bulan || 12), auto: !(+x.m > 0 || +x.w > 0 || +x.y > 0), m0 };
+/* Target Unit (persen): target riil = target dasar (kapasitas efektif / manual) x persen. Performance diukur terhadap target riil. */
+const PF_PCT = 0.8, PF_MARK = 0.15;
+const pfPct = x => x && x.pct !== '' && x.pct != null && isFinite(+x.pct) ? Math.max(0, +x.pct) : PF_PCT;
+const pfHari = () => { const g = params().global; return { H: +g.hari || 25, B: +g.bulan || 12 }; };
+const pfDays = () => { const { H, B } = pfHari(); return { d: 1, w: H / 4, m: H, y: H * B }; };
+function pfTarget(u, doc) { // { d, w, m, y } = target riil; base = target dasar 100%
+  const d = daily(u), { H, B } = pfHari(), x = doc && doc.unit && doc.unit[u] || {}, m0 = d.kapEf * H;
+  const bm = +x.m > 0 ? +x.m : m0, base = { m: bm, w: +x.w > 0 ? +x.w : bm / 4, y: +x.y > 0 ? +x.y : bm * B, d: bm / H }, p = pfPct(x);
+  return { pct: p, base, d: base.d * p, w: base.w * p, m: base.m * p, y: base.y * p, auto: !(+x.m > 0 || +x.w > 0 || +x.y > 0), m0 };
 }
+
+/* ---------- forecast keuangan: target riil x harga rata-rata (HPP + keuntungan), biaya BUASO, laba, modal kerja ---------- */
+const PF_PER = [['d', 'Per hari'], ['w', 'Per minggu'], ['m', 'Per bulan'], ['y', 'Per tahun']];
+const PF_MET = { harian: 'Biaya harian (upah, maintenance, subkon, overhead tetap per hari kerja)', satuan: 'Per satuan produksi (HPP price list x volume)' };
+function pfFcCfg(doc) { const f = (doc || get(PF_ID) || {}).fc || {}; return { markup: f.markup === '' || f.markup == null || !isFinite(+f.markup) ? PF_MARK : +f.markup, metode: PF_MET[f.metode] ? f.metode : 'harian' }; }
+/* rata-rata tertimbang produk price list per satuan target unit (PCP pcs → M3, agregat M3 → Ton) */
+function pfMix(u, x) {
+  const mix = x && x.mix || {}, has = Object.keys(mix).some(k => +mix[k] > 0);
+  const it = products(u).map(p => { const f = pfConv(u, p.n, 1, p.s), c = f > 0 ? hppCalc(u, p.n) : null; return c && c.hpp > 0 ? { n: p.n, s: p.s, f, c, w: has ? +mix[p.n] || 0 : 1 } : null; }).filter(i => i && i.w > 0);
+  const W = sum(it, 'w') || 1; it.forEach(i => { i.p = i.w / W; });
+  const per = fn => sum(it, i => i.p * fn(i.c) / i.f), bz = {};
+  BUASO.forEach(([k]) => { bz[k] = per(c => c.buaso[k] || 0); });
+  const mats = {};
+  it.forEach(i => i.c.lines.forEach(l => { if (l.komp !== 'B' || !(l.biaya > 0)) return; const n = canon(l.nama), k = n + '|' + l.sat, m = mats[k] || (mats[k] = { n, sat: l.sat, q: 0, rp: 0 }); m.q += i.p * l.koef / i.f; m.rp += i.p * l.biaya / i.f; }));
+  return { it, has, bz, cogs: per(c => c.cogs), hpp: per(c => c.hpp), mats: Object.values(mats).sort((a, b) => b.rp - a.rp) };
+}
+function pfFc(u, tg, x, cfg) {
+  x = x || {}; cfg = cfg || pfFcCfg();
+  const mx = pfMix(u, x), d = daily(u), days = pfDays(), adj = x.adj || {}, so = solarInd(), bf = bungaF(), g = params().global;
+  const hpp = mx.hpp, hr = +x.harga > 0 ? +x.harga : hpp * (1 + cfg.markup), per = {};
+  PF_PER.forEach(([k]) => {
+    const v = tg[k] || 0, n = days[k], ut = d.kapEf ? v / d.kapEf : 0, A = q => +adj[q] > 0 ? +adj[q] * v : null, r = { vol: v, omzet: v * hr };
+    if (cfg.metode === 'satuan') BUASO.forEach(([q]) => { r[q] = A(q) ?? mx.bz[q] * v; });
+    else { r.B = A('B') ?? mx.bz.B * v; r.U = A('U') ?? d.upah * n; r.A = A('A') ?? d.bbmL * so * ut + d.maint * n; r.S = A('S') ?? d.sub * n; r.O = A('O') ?? d.oh * n; }
+    r.biaya = r.B + r.U + r.A + r.S + r.O; r.lk = r.omzet - r.biaya; r.bunga = r.biaya * bf; r.laba = r.lk - r.bunga;
+    r.mats = mx.mats.map(m => ({ n: m.n, sat: m.sat, q: m.q * v, rp: m.rp * v }));
+    per[k] = r;
+  });
+  const masa = +g.masa || 0;
+  return { u, hr, hpp, manual: +x.harga > 0, mx, per, masa, modal: per.m.biaya * Math.max(1, masa), adj: BUASO.some(([q]) => +adj[q] > 0) };
+}
+/* gabungan beberapa unit (satuan volume berbeda → volume per unit tetap terpisah) */
+function pfFcSum(list) {
+  const per = {};
+  PF_PER.forEach(([k]) => { const r = { omzet: 0, biaya: 0, lk: 0, bunga: 0, laba: 0, mats: [] }; BUASO.forEach(([q]) => r[q] = 0); list.forEach(f => { const p = f.per[k]; ['omzet', 'biaya', 'lk', 'bunga', 'laba'].concat(BUASO.map(b => b[0])).forEach(q => r[q] += p[q]); r.mats = r.mats.concat(p.mats.map(m => Object.assign({ u: f.u }, m))); }); per[k] = r; });
+  const mm = {}; PF_PER.forEach(([k]) => per[k].mats.forEach(m => { const key = m.n + '|' + m.sat, o = mm[key] || (mm[key] = { n: m.n, sat: m.sat, u: new Set(), d: 0, w: 0, m: 0, y: 0, rd: 0, rw: 0, rm: 0, ry: 0 }); o.u.add(m.u); o[k] += m.q; o['r' + k] += m.rp; }));
+  return { per, list, modal: sum(list, 'modal'), mats: Object.values(mm).sort((a, b) => b.ry - a.ry) };
+}
+const pfFcOf = (D, u) => D.fc[u];
+const pfFcAct = D => pfFcSum(D.units.filter(x => x.aktif).map(x => D.fc[x.u]));
 function pfBuild(bc) { // hitung satu basecamp dari S.docs
   const doc = get(PF_ID) || {}, src = {}; Object.keys(PF_SRC).forEach(k => src[k] = !(doc.src && doc.src[k] === false));
   const { ev, miss } = pfEvents(src), def = PF_DEF[bc] || PF_U;
@@ -97,7 +142,9 @@ function pfBuild(bc) { // hitung satu basecamp dari S.docs
     const map = { w: {}, m: {}, y: {} }; e.forEach(q => ['w', 'm', 'y'].forEach(k => { const key = pfKey(k, q.t); map[k][key] = (map[k][key] || 0) + q.v; }));
     return { u, ev: e, map, tg: pfTarget(u, doc), aktif: x.aktif != null ? !!x.aktif : def.includes(u) || e.length > 0 };
   });
-  return { bc, units, miss, src, by: Object.fromEntries(units.map(x => [x.u, x])) };
+  const cfg = pfFcCfg(doc), fc = {};
+  units.forEach(x => { try { fc[x.u] = pfFc(x.u, x.tg, doc.unit && doc.unit[x.u], cfg); } catch (e) { console.warn('forecast', x.u, e); const z = { vol: 0, omzet: 0, biaya: 0, lk: 0, bunga: 0, laba: 0, mats: [], B: 0, U: 0, A: 0, S: 0, O: 0 }; fc[x.u] = { u: x.u, hr: 0, hpp: 0, mx: { it: [], bz: {}, mats: [] }, per: { d: z, w: z, m: z, y: z }, masa: 0, modal: 0, err: 1 }; } });
+  return { bc, units, miss, src, cfg, fc, by: Object.fromEntries(units.map(x => [x.u, x])) };
 }
 const pfHere = () => memo('perf', () => pfBuild(BC.replace(/^Basecamp /, '')));
 const pfVal = (x, mode, key) => ({ real: x.map[mode][key] || 0, tg: x.tg[mode] });
@@ -213,10 +260,82 @@ function pfUnitHtml(D, s) {
     pfCard('Sumber data', pfLabel(mode, key), table([{ t: 'Sumber', f: q => q.n }, { t: sat, f: q => num(q.v), num: true }, { t: 'Catatan', f: q => q.c, num: true }], gs, { empty: 'Belum ada realisasi pada periode ini.' })) + '</div>';
 }
 function pfTargetHtml(D) {
-  return '<section class="card"><div class="chead"><h3>Target produksi ' + esc(BC) + '</h3><div class="cbtns"><button class="btn ghost sm" data-pfsrc>' + ic('edit') + 'Sumber realisasi</button></div></div><div class="tbl"><table><thead><tr><th>Unit</th><th>Status</th><th class="n">Kapasitas efektif / hari</th><th class="n">Target / minggu</th><th class="n">Target / bulan</th><th class="n">Target / tahun</th><th>Dasar</th><th></th></tr></thead><tbody>' +
-    D.units.map(x => '<tr><td>' + unitChip(x.u) + ' ' + esc(UNIT_NAME[x.u]) + '</td><td>' + (x.aktif ? chip('Aktif', 'ok') : chip('Tidak aktif', 'mute')) + '</td><td class="n">' + num(daily(x.u).kapEf) + ' ' + PF_SAT[x.u] + '</td>' + ['w', 'm', 'y'].map(k => '<td class="n">' + num(x.tg[k]) + ' ' + PF_SAT[x.u] + '</td>').join('') + '<td class="muted">' + (x.tg.auto ? 'Kapasitas efektif x ' + num(params().global.hari) + ' hari kerja' : 'Manual') + '</td><td><button class="btn ghost sm" data-pftg="' + x.u + '">' + ic('edit') + 'Ubah</button></td></tr>').join('') + '</tbody></table></div></section>' +
-    '<div class="note">Target otomatis mengikuti sheet Target Unit: bulan = kapasitas efektif per hari x hari kerja, minggu = bulan / 4, tahun = bulan x 12. Kapasitas diubah di HPP &amp; BUASO › Parameter &amp; Biaya Harian.</div>';
+  const act = D.units.filter(x => x.aktif), F = pfFcAct(D);
+  return '<section class="card"><div class="chead"><h3>Target produksi ' + esc(BC) + '</h3><div class="cbtns"><button class="btn ghost sm" data-pfsrc>' + ic('edit') + 'Sumber realisasi</button><button class="btn ghost sm" data-pffc>' + ic('edit') + 'Keuntungan &amp; metode biaya</button></div></div><div class="tbl"><table class="pftg"><thead><tr><th>Unit</th><th>Status</th><th class="n">Kapasitas efektif / hari</th><th class="n">Target Unit</th><th class="n">Target / hari</th><th class="n">Target / minggu</th><th class="n">Target / bulan</th><th class="n">Target / tahun</th><th class="n">Harga rata-rata<small>HPP + ' + pfP(D.cfg.markup) + '</small></th><th class="n">Omzet / tahun</th><th>Dasar</th><th></th></tr></thead><tbody>' +
+    D.units.map(x => { const f = D.fc[x.u], st = PF_SAT[x.u]; return '<tr' + (x.aktif ? '' : ' class="pfoff"') + '><td style="white-space:nowrap">' + unitChip(x.u) + ' ' + esc(UNIT_NAME[x.u]) + '</td><td>' + (x.aktif ? chip('Aktif', 'ok') : chip('Tidak aktif', 'mute')) + '</td><td class="n">' + num(daily(x.u).kapEf) + ' ' + st + '</td>' +
+      '<td class="n"><b class="pfpct">' + pfP(x.tg.pct) + '</b><small>dari ' + num(x.tg.base.d) + ' ' + st + '/hari</small></td>' + ['d', 'w', 'm', 'y'].map(k => '<td class="n">' + num(x.tg[k]) + ' ' + st + '</td>').join('') +
+      '<td class="n">' + rp(f.hr) + '<small>per ' + st + (f.manual ? ' · manual' : ' · HPP ' + rp(f.hpp)) + '</small></td><td class="n"><b>' + rpS(f.per.y.omzet) + '</b></td>' +
+      '<td class="muted">' + (x.tg.auto ? 'Kapasitas efektif x ' + num(pfHari().H) + ' hari kerja' : 'Target dasar manual') + ' x ' + pfP(x.tg.pct) + '</td><td><button class="btn ghost sm" data-pftg="' + x.u + '">' + ic('edit') + 'Ubah</button></td></tr>'; }).join('') +
+    (act.length ? '<tr class="sub strong"><td colspan="9">Total unit aktif (' + act.map(x => x.u).join(', ') + ')</td><td class="n">' + rpS(F.per.y.omzet) + '</td><td colspan="2" class="muted">laba bersih ' + rpS(F.per.y.laba) + ' / tahun</td></tr>' : '') + '</tbody></table></div></section>' +
+    '<div class="note">Target dasar mengikuti sheet Target Unit: bulan = kapasitas efektif per hari x hari kerja, minggu = bulan / 4, tahun = bulan x 12. <b>Target Unit</b> (persen) mengubah target dasar menjadi target riil yang dikejar, misalnya 80% x 1.000 ton = 800 ton; Performance diukur terhadap target riil ini. <b>Harga rata-rata</b> = rata-rata HPP + bunga produk price list (per satuan unit, bisa diberi porsi produk) ditambah keuntungan ' + pfP(D.cfg.markup) + ', menjadi dasar omzet per tahun dan menu Forecast. Kapasitas diubah di HPP &amp; BUASO › Parameter &amp; Biaya Harian.</div>';
 }
+/* ---------- forecast (laporan laba rugi proyeksi) ---------- */
+const PF_BC = { B: '#1f5fae', U: '#0f8a6a', A: '#b8641a', S: '#7a4fc2', O: '#66758a' };
+const pfRp = v => '<span' + (v < -0.5 ? ' class="t-bad"' : '') + '>' + rp(v) + '</span>';
+const pfSel = (D, s) => { const u = s.fu && PF_U.includes(s.fu) ? s.fu : 'all'; return { u, list: u === 'all' ? D.units.filter(x => x.aktif).map(x => D.fc[x.u]) : [D.fc[u]] }; };
+function pfFcReal(D, list) { // omzet realisasi tahun berjalan = volume tercatat x harga rata-rata
+  const k = pfKey('y', today()), f = pfFrac('y', k);
+  return { real: sum(list, fc => (D.by[fc.u].map.y[k] || 0) * fc.hr), tg: sum(list, fc => fc.per.y.omzet) * f, f };
+}
+function pfStmt(D, F, list) {
+  const P = F.per, tr = (cls, label, fn, pc) => '<tr' + (cls ? ' class="' + cls + '"' : '') + '><td>' + label + '</td>' + PF_PER.map(([k]) => '<td class="n">' + fn(P[k], k) + '</td>').join('') + '<td class="n">' + (pc == null ? '' : pfP(pc)) + '</td></tr>';
+  const om = P.y.omzet || 0, rel = v => om ? v / om : null;
+  return '<div class="tbl"><table class="pfst"><thead><tr><th>Uraian</th>' + PF_PER.map(([, t]) => '<th class="n">' + t + '</th>').join('') + '<th class="n">% omzet</th></tr></thead><tbody>' +
+    '<tr class="pfsec"><td colspan="6">Volume target riil</td></tr>' +
+    list.map(fc => tr('', unitChip(fc.u) + ' ' + UNIT_PROD[fc.u] + ' <small class="muted">Target Unit ' + pfP(D.by[fc.u].tg.pct) + '</small>', (r, k) => num(fc.per[k].vol) + ' ' + PF_SAT[fc.u], null)).join('') +
+    '<tr class="pfsec"><td colspan="6">A. Pendapatan (omzet)</td></tr>' +
+    list.map(fc => tr('', 'Penjualan ' + fc.u + ' <small class="muted">@ ' + rp(fc.hr) + ' / ' + PF_SAT[fc.u] + '</small>', (r, k) => rp(fc.per[k].omzet), rel(fc.per.y.omzet))).join('') +
+    tr('sub strong', 'Total omzet', r => rp(r.omzet), om ? 1 : null) +
+    '<tr class="pfsec"><td colspan="6">B. Biaya produksi (BUASO)</td></tr>' +
+    BUASO.map(([q, n]) => tr('', '<i class="pfdot" style="background:' + PF_BC[q] + '"></i>' + n + ' (' + q + ')', r => rp(r[q]), rel(P.y[q]))).join('') +
+    tr('sub strong', 'Total biaya produksi (HPP)', r => rp(r.biaya), rel(P.y.biaya)) +
+    tr('strong pfline', 'C. Laba kotor (A - B)', r => pfRp(r.lk), rel(P.y.lk)) +
+    tr('', 'D. Bunga modal kerja <small class="muted">' + pfP(bungaF()) + ' dari biaya</small>', r => rp(r.bunga), rel(P.y.bunga)) +
+    tr('grand', 'E. Laba bersih sebelum pajak (C - D)', r => rp(r.laba), rel(P.y.laba)) + '</tbody></table></div>';
+}
+function pfBudget(F) {
+  const P = F.per, y = P.y, tot = y.biaya || 1, masa = Math.max(1, ...F.list.map(f => f.masa || 0));
+  return '<div class="buaso">' + PF_PER.map(([k, t]) => '<div><span>Pengeluaran ' + t.toLowerCase() + '</span><b>' + rpS(P[k].biaya + P[k].bunga) + '</b><small>BUASO ' + rpS(P[k].biaya) + ' + bunga ' + rpS(P[k].bunga) + '</small></div>').join('') +
+    '<div class="tot"><span>Modal kerja disiapkan</span><b>' + rpS(F.modal) + '</b><small>biaya ' + num(masa) + ' bulan perputaran</small></div></div>' +
+    '<div class="pfstack" role="img" aria-label="Komposisi biaya BUASO">' + BUASO.map(([q, n]) => y[q] > 0 ? '<i style="width:' + (y[q] / tot * 100).toFixed(2) + '%;background:' + PF_BC[q] + '" data-tip="' + esc('<b>' + n + ' (' + q + ')</b><br>' + rp(y[q]) + ' / tahun<br>' + pfP(y[q] / tot) + ' dari biaya') + '"></i>' : '').join('') + '</div>' +
+    '<div class="pfkey">' + BUASO.map(([q, n]) => '<span><i class="pfdot" style="background:' + PF_BC[q] + '"></i>' + n + ' ' + pfP(y[q] / tot) + '</span>').join('') + '</div>' +
+    '<div class="tbl"><table><thead><tr><th>Kebutuhan dana</th>' + PF_PER.map(([, t]) => '<th class="n">' + t + '</th>').join('') + '</tr></thead><tbody>' +
+    BUASO.map(([q, n]) => '<tr><td>' + n + ' (' + q + ')</td>' + PF_PER.map(([k]) => '<td class="n">' + rp(P[k][q]) + '</td>').join('') + '</tr>').join('') +
+    '<tr class="sub strong"><td>Total pengeluaran produksi</td>' + PF_PER.map(([k]) => '<td class="n">' + rp(P[k].biaya) + '</td>').join('') + '</tr><tr><td>Bunga modal kerja</td>' + PF_PER.map(([k]) => '<td class="n">' + rp(P[k].bunga) + '</td>').join('') + '</tr>' +
+    '<tr class="grand"><td>Anggaran kas keluar</td>' + PF_PER.map(([k]) => '<td class="n">' + rp(P[k].biaya + P[k].bunga) + '</td>').join('') + '</tr></tbody></table></div>';
+}
+function pfMatsHtml(F) {
+  const m = F.mats.filter(x => x.ry > 0.5);
+  if (!m.length) return '<div class="empty"><p>Tidak ada rincian bahan.</p></div>';
+  return '<div class="tbl"><table><thead><tr><th>Bahan</th><th>Satuan</th><th>Unit</th>' + PF_PER.map(([, t]) => '<th class="n">' + t + '</th>').join('') + '<th class="n">Biaya / bulan</th><th class="n">Biaya / tahun</th></tr></thead><tbody>' +
+    m.map(x => '<tr><td class="strong">' + esc(x.n) + '</td><td>' + esc(x.sat) + '</td><td>' + [...x.u].join(', ') + '</td>' + PF_PER.map(([k]) => '<td class="n">' + num(x[k]) + '</td>').join('') + '<td class="n">' + rp(x.rm) + '</td><td class="n">' + rp(x.ry) + '</td></tr>').join('') +
+    '<tr class="sub strong"><td colspan="7">Total bahan</td><td class="n">' + rp(sum(m, 'rm')) + '</td><td class="n">' + rp(sum(m, 'ry')) + '</td></tr></tbody></table></div>';
+}
+function pfFcHtml(D, s) {
+  const { u, list } = pfSel(D, s), cfg = D.cfg;
+  if (!list.length) return '<div class="empty"><p>Belum ada unit aktif. Atur di tab Target Produksi.</p></div>';
+  const F = pfFcSum(list), y = F.per.y, mg = y.omzet ? y.laba / y.omzet : null, R = pfFcReal(D, list), one = u !== 'all' ? D.fc[u] : null, x = one && D.by[u];
+  return (x && !x.aktif ? '<div class="note">Unit ' + u + ' tidak aktif di ' + esc(BC) + ' dan tidak ikut forecast gabungan.</div>' : '') +
+    '<div class="kpis">' + kpi('Omzet / tahun', rpS(y.omzet), one ? num(y.vol || one.per.y.vol) + ' ' + PF_SAT[u] + ' x ' + rp(one.hr) : list.length + ' unit aktif, target riil') + kpi('Biaya produksi / tahun', rpS(y.biaya), 'BUASO, tanpa bunga') +
+    kpi('Laba bersih / tahun', rpS(y.laba), 'margin ' + pfP(mg), y.laba < 0 ? 'bad' : 'good') + kpi('Modal kerja disiapkan', rpS(F.modal), 'pengeluaran ' + rpS(F.per.m.biaya) + ' / bulan') +
+    kpi('Omzet realisasi tahun ini', rpS(R.real), 'target s.d. hari ini ' + rpS(R.tg) + ' (' + pfP(R.tg ? R.real / R.tg : null) + ')') + '</div>' +
+    pfCard('Proyeksi laba rugi' + (one ? ' ' + u : ' gabungan unit aktif'), 'target riil · keuntungan ' + pfP(cfg.markup) + ' dari HPP', pfStmt(D, F, list)) +
+    '<section class="card"><div class="chead"><h3>Anggaran pengeluaran &amp; modal kerja</h3><div class="cmeta">kebutuhan dana BUASO per periode</div></div>' + pfBudget(F) + '</section>' +
+    (one ? pfMixHtml(D, one) : '<section class="card"><div class="chead"><h3>Forecast per unit</h3><div class="cmeta">per tahun</div></div>' + table([
+      { t: 'Unit', f: f => unitChip(f.u) + ' ' + UNIT_PROD[f.u], raw: true }, { t: 'Target Unit', f: f => pfP(D.by[f.u].tg.pct), num: true }, { t: 'Volume', f: f => num(f.per.y.vol) + ' ' + PF_SAT[f.u], num: true }, { t: 'Harga rata-rata', f: f => rp(f.hr), num: true },
+      { t: 'Omzet', f: f => rpS(f.per.y.omzet), num: true }, { t: 'Biaya BUASO', f: f => rpS(f.per.y.biaya), num: true }, { t: 'Laba bersih', f: f => '<span' + (f.per.y.laba < 0 ? ' class="t-bad"' : '') + '>' + rpS(f.per.y.laba) + '</span>', num: true, raw: true }, { t: 'Margin', f: f => pfP(f.per.y.omzet ? f.per.y.laba / f.per.y.omzet : null), num: true },
+      { t: 'Modal kerja', f: f => rpS(f.modal), num: true }, { t: '', f: f => '<button class="btn ghost sm" data-pfmix="' + f.u + '">' + ic('edit') + 'Porsi</button>', raw: true }], list.map(f => Object.assign({ id: f.u }, f))) + '</section>') +
+    pfCard('Rincian kebutuhan bahan (B)', 'kuantitas dari komposisi jobmix x volume target riil', pfMatsHtml(F)) +
+    '<div class="note">Omzet = volume target riil x harga rata-rata (HPP + bunga price list + ' + pfP(cfg.markup) + ', atau harga manual). Metode biaya: ' + esc(PF_MET[cfg.metode]) + '. Hari kerja ' + num(pfHari().H) + ' / bulan, minggu = bulan / 4, tahun = ' + num(pfHari().B) + ' bulan. Modal kerja = pengeluaran BUASO per bulan x masa perputaran (Parameter Umum HPP). Semua angka ikut berubah saat HPP &amp; BUASO, harga bahan, overhead, atau target diubah.' + (list.some(f => f.adj) ? ' Ada penyesuaian biaya manual: ' + list.filter(f => f.adj).map(f => f.u).join(', ') + '.' : '') + '</div>';
+}
+function pfMixHtml(D, f) {
+  const sat = PF_SAT[f.u], mk = D.cfg.markup;
+  return '<section class="card"><div class="chead"><h3>Komposisi produk ' + f.u + ' &amp; harga rata-rata</h3><div class="cbtns"><button class="btn ghost sm" data-pfmix="' + f.u + '">' + ic('edit') + 'Porsi produk &amp; penyesuaian biaya</button></div></div>' +
+    '<div class="buaso">' + BUASO.map(([q, n]) => '<div><span>' + n + ' / ' + sat + '</span><b>' + rp(f.per.y.vol ? f.per.y[q] / f.per.y.vol : f.mx.bz[q]) + '</b><small>' + (f.mx.bz[q] ? 'HPP ' + rp(f.mx.bz[q]) : '') + '</small></div>').join('') + '<div class="tot"><span>Harga rata-rata</span><b>' + rp(f.hr) + '</b><small>' + (f.manual ? 'manual' : 'HPP ' + rp(f.hpp) + ' + ' + pfP(mk)) + '</small></div></div>' +
+    table([{ t: 'Produk', f: i => i.n, cls: 'strong' }, { t: 'Porsi', f: i => pfP(i.p), num: true }, { t: 'HPP + bunga', f: i => rp(i.c.hpp) + ' / ' + i.s, num: true }, { t: 'HPP per ' + sat, f: i => rp(i.c.hpp / i.f), num: true }, { t: 'Harga + ' + pfP(mk), f: i => rp(i.c.hpp * (1 + mk)) + ' / ' + i.s, num: true }, { t: 'Price list Loco Eks.', f: i => rp(i.c.harga.ext), num: true }],
+      f.mx.it.slice().sort((a, b) => b.p - a.p).map(i => Object.assign({ id: i.n }, i))) + '<div class="cfoot">' + (f.mx.has ? 'Porsi produk diatur manual.' : 'Porsi sama rata untuk semua produk price list ' + f.u + '.') + '</div></section>';
+}
+
 /* ---------- semua basecamp ---------- */
 function pfAllHtml(list, s) {
   const { mode, key } = s, f = pfFrac(mode, key), keys = pfSeries(mode, key), nowK = pfKey(mode, today());
@@ -232,7 +351,15 @@ function pfAllHtml(list, s) {
     '<div class="sech"><h2>Tren per basecamp</h2></div><div class="pfgrid">' + list.map(D => pfCard('Basecamp ' + D.bc, 'rata-rata unit aktif', pfSlot({ type: 'line', title: 'Tren ' + D.bc, keys, mode, p: keys.map(k => k > nowK ? null : pfBcPct(D, mode, k)) }))).join('') + '</div>' +
     '<div class="sech"><h2>Tren per unit, seluruh basecamp</h2></div><div class="pfgrid">' + us.map(([u]) => { const a = keys.map(k => pfUnitAll(list, u, mode, k)); return pfCard(u + ' · ' + UNIT_PROD[u], PF_SAT[u] + ' per ' + PF_MODE[mode].k, pfSlot({ title: 'Realisasi dan target ' + u, keys, mode, cur: key, sat: PF_SAT[u], real: a.map(r => r.real), tg: a.map(r => r.tg) }) + pfLeg); }).join('') + '</div>' +
     pfCard('Tabel per basecamp', PF_MODE[mode].t, '<div class="tbl"><table><thead><tr><th>Periode</th>' + list.map(D => '<th class="n">' + esc(D.bc) + '</th>').join('') + '<th class="n">Keseluruhan</th></tr></thead><tbody>' + keys.filter(k => k <= nowK).reverse().map(k => '<tr><td class="strong">' + esc(pfLabel(mode, k)) + '</td>' + list.map(D => '<td class="n">' + pfP(pfBcPct(D, mode, k)) + '</td>').join('') + '<td class="n"><b>' + pfP(pfAllPct(list, mode, k)) + '</b></td></tr>').join('') + '</tbody></table></div>') +
+    pfCard('Forecast keuangan per basecamp', 'per tahun · target riil unit aktif', pfAllFc(list)) +
     '<div class="note">Per unit gabungan = jumlah realisasi dibagi jumlah target semua basecamp yang unitnya aktif. Per basecamp = rata-rata pencapaian unit aktifnya. Keseluruhan basecamp = rata-rata pencapaian keempat unit gabungan. Unit dihitung paling tinggi 100%.' + (list.some(D => !D.units.some(x => x.ev.length)) ? ' Belum ada data realisasi: ' + esc(list.filter(D => !D.units.some(x => x.ev.length)).map(D => D.bc).join(', ')) + '.' : '') + '</div>';
+}
+function pfAllFc(list) {
+  const rows = list.map(D => Object.assign({ id: D.bc, bc: D.bc, act: D.units.filter(x => x.aktif).map(x => x.u) }, pfFcAct(D)));
+  const T = k => sum(rows, r => r.per.y[k]), om = T('omzet');
+  return '<div class="tbl"><table><thead><tr><th>Basecamp</th><th>Unit aktif</th><th class="n">Omzet</th><th class="n">Biaya BUASO</th><th class="n">Bunga</th><th class="n">Laba bersih</th><th class="n">Margin</th><th class="n">Modal kerja</th></tr></thead><tbody>' +
+    rows.map(r => '<tr><td class="strong">' + esc(r.bc) + '</td><td>' + r.act.join(', ') + '</td><td class="n">' + rp(r.per.y.omzet) + '</td><td class="n">' + rp(r.per.y.biaya) + '</td><td class="n">' + rp(r.per.y.bunga) + '</td><td class="n">' + pfRp(r.per.y.laba) + '</td><td class="n">' + pfP(r.per.y.omzet ? r.per.y.laba / r.per.y.omzet : null) + '</td><td class="n">' + rp(r.modal) + '</td></tr>').join('') +
+    '<tr class="grand"><td colspan="2">Semua basecamp</td><td class="n">' + rp(om) + '</td><td class="n">' + rp(T('biaya')) + '</td><td class="n">' + rp(T('bunga')) + '</td><td class="n">' + rp(T('laba')) + '</td><td class="n">' + pfP(om ? T('laba') / om : null) + '</td><td class="n">' + rp(sum(rows, 'modal')) + '</td></tr></tbody></table></div>';
 }
 function pfWith(m, fn) { const keep = S.docs; S.docs = m; S.ver = (S.ver || 0) + 1; try { return fn(); } finally { S.docs = keep; S.ver = (S.ver || 0) + 1; } }
 const pfList = (bcs, data) => bcs.filter(b => data[b]).map(b => pfWith(data[b], () => pfBuild(b)));
@@ -270,12 +397,42 @@ function pfAllMount(main, head, bcs, data) {
 /* ---------- formulir ---------- */
 function savePf(mut) { const d = clone(get(PF_ID) || {}); delete d.id; Object.keys(d).forEach(k => { if (k[0] === '_') delete d[k]; }); mut(d); save('param', d, PF_ID); }
 function pfTargetForm(u) {
-  const x = pfHere().by[u], d = get(PF_ID) || {}, o = d.unit && d.unit[u] || {}, sat = PF_SAT[u];
+  const D = pfHere(), x = D.by[u], d = get(PF_ID) || {}, o = d.unit && d.unit[u] || {}, sat = PF_SAT[u], f = D.fc[u], { H, B } = pfHari();
   openForm({
-    title: 'Target Produksi ' + u, sub: UNIT_NAME[u] + ' · kosongkan untuk memakai kapasitas efektif', small: true, value: { aktif: x.aktif, w: o.w || '', m: o.m || '', y: o.y || '' },
-    fields: [{ k: 'aktif', type: 'check', full: true, text: 'Unit ' + u + ' aktif di ' + BC }, { k: 'w', label: 'Target per minggu', type: 'num', suffix: sat }, { k: 'm', label: 'Target per bulan', type: 'num', suffix: sat }, { k: 'y', label: 'Target per tahun', type: 'num', suffix: sat },
-      { k: 'tot', type: 'html', html: v => { const m = +v.m > 0 ? +v.m : x.tg.m0; return '<div class="buaso"><div><span>Minggu</span><b>' + num(+v.w > 0 ? +v.w : m / 4) + ' ' + sat + '</b></div><div><span>Bulan</span><b>' + num(m) + ' ' + sat + '</b></div><div><span>Tahun</span><b>' + num(+v.y > 0 ? +v.y : m * (+params().global.bulan || 12)) + ' ' + sat + '</b></div></div>'; } }],
-    onSave: v => { if (['w', 'm', 'y'].some(k => +v[k] < 0)) { toast('Target tidak boleh negatif', 'err'); return false; } savePf(q => { q.unit = q.unit || {}; q.unit[u] = { aktif: !!v.aktif, w: +v.w || 0, m: +v.m || 0, y: +v.y || 0 }; }); toast('Target ' + u + ' tersimpan'); }
+    title: 'Target Produksi ' + u, sub: UNIT_NAME[u] + ' · target dasar kosong = kapasitas efektif', small: true, value: { aktif: x.aktif, pct: Math.round(x.tg.pct * 1e4) / 100, w: o.w || '', m: o.m || '', y: o.y || '', harga: o.harga || '' },
+    fields: [{ k: 'aktif', type: 'check', full: true, text: 'Unit ' + u + ' aktif di ' + BC },
+      { k: 'pct', label: 'Target Unit (target riil)', type: 'num', suffix: '%', req: 'zero', help: 'Persen dari target dasar yang dikejar, contoh 80' },
+      { k: 'harga', label: 'Harga rata-rata manual', type: 'money', help: 'Kosong = HPP rata-rata ' + rp(f.hpp) + ' + ' + pfP(D.cfg.markup) + ' = ' + rp(f.hpp * (1 + D.cfg.markup)) + ' per ' + sat },
+      { k: 'm', label: 'Target dasar per bulan', type: 'num', suffix: sat, ph: num(x.tg.m0) }, { k: 'w', label: 'Target dasar per minggu', type: 'num', suffix: sat }, { k: 'y', label: 'Target dasar per tahun', type: 'num', suffix: sat },
+      { k: 'tot', type: 'html', html: v => { const m = +v.m > 0 ? +v.m : x.tg.m0, p = (+v.pct || 0) / 100, b = { d: m / H, w: +v.w > 0 ? +v.w : m / 4, m, y: +v.y > 0 ? +v.y : m * B }, hr = +v.harga > 0 ? +v.harga : f.hpp * (1 + D.cfg.markup);
+        return '<div class="buaso">' + [['d', 'Hari'], ['w', 'Minggu'], ['m', 'Bulan'], ['y', 'Tahun']].map(([k, t]) => '<div><span>Target riil / ' + t.toLowerCase() + '</span><b>' + num(b[k] * p) + ' ' + sat + '</b><small>dasar ' + num(b[k]) + '</small></div>').join('') + '<div class="tot"><span>Omzet / tahun</span><b>' + rpS(b.y * p * hr) + '</b><small>' + rp(hr) + ' / ' + sat + '</small></div></div>'; } }],
+    onSave: v => { if (['w', 'm', 'y', 'pct', 'harga'].some(k => +v[k] < 0)) { toast('Angka tidak boleh negatif', 'err'); return false; } savePf(q => { q.unit = q.unit || {}; q.unit[u] = Object.assign({}, q.unit[u], { aktif: !!v.aktif, pct: (+v.pct || 0) / 100, w: +v.w || 0, m: +v.m || 0, y: +v.y || 0, harga: +v.harga || 0 }); }); toast('Target ' + u + ' tersimpan'); }
+  });
+}
+function pfFcCfgForm() {
+  const c = pfHere().cfg;
+  openForm({
+    title: 'Pengaturan Forecast', sub: 'Berlaku untuk semua unit di ' + BC, small: true, value: { markup: Math.round(c.markup * 1e4) / 100, metode: c.metode },
+    fields: [{ k: 'markup', label: 'Keuntungan dari HPP', type: 'num', suffix: '%', req: 'zero', help: 'Harga rata-rata = HPP + bunga x (1 + keuntungan)' },
+      { k: 'metode', label: 'Metode biaya U, A, S, O', type: 'select', empty: false, full: true, opts: Object.entries(PF_MET).map(([v, t]) => ({ v, t })) },
+      { k: 'i', type: 'html', html: v => '<div class="note" style="margin:0">' + (v.metode === 'satuan' ? 'Semua biaya ikut volume: biaya = HPP per satuan price list x volume target riil, sehingga laba selalu sekitar persen keuntungan.' : 'Bahan dan BBM alat ikut volume. Upah, maintenance alat, subkon, dan overhead dibayar per hari kerja walau produksi di bawah kapasitas, sehingga laba mengikuti tingkat Target Unit.') + '</div>' }],
+    onSave: v => { if (+v.markup < 0) { toast('Keuntungan tidak boleh negatif', 'err'); return false; } savePf(q => { q.fc = Object.assign({}, q.fc, { markup: (+v.markup || 0) / 100, metode: v.metode }); }); toast('Pengaturan forecast tersimpan'); }
+  });
+}
+/* porsi produk + penyesuaian biaya per satuan */
+function pfMixForm(u) {
+  const D = pfHere(), d = get(PF_ID) || {}, o = d.unit && d.unit[u] || {}, sat = PF_SAT[u], f = D.fc[u], mix = o.mix || {}, adj = o.adj || {};
+  const ps = products(u).map(p => ({ n: p.n, s: p.s, f: pfConv(u, p.n, 1, p.s), c: hppCalc(u, p.n) })).filter(p => p.f > 0 && p.c && p.c.hpp > 0);
+  const val = { }; ps.forEach((p, i) => { val['p' + i] = +mix[p.n] > 0 ? +mix[p.n] : ''; }); BUASO.forEach(([k]) => { val['a' + k] = +adj[k] > 0 ? +adj[k] : ''; });
+  const W = v => ps.reduce((a, p, i) => a + (+v['p' + i] || 0), 0);
+  openForm({
+    title: 'Porsi Produk & Penyesuaian ' + u, sub: UNIT_NAME[u] + ' · porsi kosong semua = rata-rata sama rata', wide: true, value: val,
+    fields: [{ k: 'h1', type: 'html', html: () => '<b>Porsi produk dari volume ' + sat + '</b> <span class="muted">(angka bebas, otomatis dijadikan persen)</span>' }]
+      .concat(ps.map((p, i) => ({ k: 'p' + i, label: p.n + ' · HPP ' + rp(p.c.hpp / p.f) + '/' + sat, type: 'num', third: true, suffix: '%' })))
+      .concat([{ k: 'h2', type: 'html', html: v => { const w = W(v); let hpp = 0; ps.forEach((p, i) => { const q = w ? (+v['p' + i] || 0) / w : 1 / ps.length; hpp += q * p.c.hpp / p.f; }); return '<div class="buaso"><div><span>Total porsi</span><b>' + (w ? num(w) : 'sama rata') + '</b></div><div><span>HPP rata-rata</span><b>' + rp(hpp) + '</b><small>per ' + sat + '</small></div><div class="tot"><span>Harga rata-rata</span><b>' + rp(+o.harga > 0 ? +o.harga : hpp * (1 + D.cfg.markup)) + '</b><small>' + (+o.harga > 0 ? 'manual' : 'HPP + ' + pfP(D.cfg.markup)) + '</small></div></div><b>Penyesuaian biaya per ' + sat + '</b> <span class="muted">(kosong = otomatis dari HPP &amp; BUASO)</span>'; } }])
+      .concat(BUASO.map(([k, n]) => ({ k: 'a' + k, label: n + ' (' + k + ')', type: 'money', third: true, help: 'Saat ini ' + rp(f.per.y.vol ? f.per.y[k] / f.per.y.vol : f.mx.bz[k]) + ' / ' + sat }))),
+    onSave: v => { if (Object.values(v).some(q => +q < 0)) { toast('Angka tidak boleh negatif', 'err'); return false; }
+      savePf(q => { q.unit = q.unit || {}; const m = {}, a = {}; ps.forEach((p, i) => { if (+v['p' + i] > 0) m[p.n] = +v['p' + i]; }); BUASO.forEach(([k]) => { if (+v['a' + k] > 0) a[k] = +v['a' + k]; }); q.unit[u] = Object.assign({}, q.unit[u], { mix: m, adj: a }); }); toast('Forecast ' + u + ' tersimpan'); }
   });
 }
 function pfSrcForm() {
@@ -291,20 +448,21 @@ MODS.perf = {
     const st = stateOf('perf', { tab: 'main', unit: 'AMP' });
     if (!PF_U.includes(st.unit)) st.unit = 'AMP';
     if (!st.mode) { st.mode = 'm'; st.key = pfKey('m', today()); }
-    const multi = typeof EMBED !== 'undefined' && EMBED, tabs = [{ k: 'main', t: 'Keseluruhan Unit' }, { k: 'unit', t: 'Per Unit' }].concat(multi ? [{ k: 'all', t: 'Semua Basecamp' }] : [], [{ k: 'target', t: 'Target Produksi' }]);
+    const multi = typeof EMBED !== 'undefined' && EMBED, tabs = [{ k: 'main', t: 'Keseluruhan Unit' }, { k: 'unit', t: 'Per Unit' }].concat(multi ? [{ k: 'all', t: 'Semua Basecamp' }] : [], [{ k: 'target', t: 'Target Produksi' }, { k: 'fc', t: 'Forecast' }]);
     if (!tabs.some(t => t.k === st.tab)) st.tab = 'main';
     let ctl;
     ctl = page(root, {
       key: 'perf', st, report: pfReport, tabs,
       actions: [{ id: 'real', t: 'Catat Produksi', icon: 'prod' }],
       on: { real: () => { if (all('prod').some(p => p.status !== 'Batal' && soStats(p).sisaProd > 0)) realForm(); else { toast('Belum ada SO / WO terbuka. Buat dulu di Kartu Produksi.', 'err'); location.hash = '#/prod'; } } },
-      filter: s => s.tab === 'target' ? '' : pfHead(s.mode, s.key) + (s.tab === 'unit' ? '<div class="fbar"><div class="seg" data-ps="unit">' + PF_U.map(u => '<button class="' + (s.unit === u ? 'on' : '') + '" data-v="' + u + '">' + u + ' · ' + UNIT_PROD[u] + '</button>').join('') + '</div></div>' : ''),
-      bindFilter: (el, s, redraw) => { pfHeadBind(el, s, redraw); $$('[data-ps] button', el).forEach(b => b.onclick = () => { s.unit = b.dataset.v; persist('perf'); redraw(); }); },
+      filter: s => s.tab === 'target' ? '' : s.tab === 'fc' ? '<div class="fbar"><div class="seg" data-pfu>' + [['all', 'Semua unit aktif']].concat(PF_U.map(u => [u, u + ' · ' + UNIT_PROD[u]])).map(([v, t]) => '<button class="' + ((s.fu || 'all') === v ? 'on' : '') + '" data-v="' + v + '">' + t + '</button>').join('') + '</div></div>' : pfHead(s.mode, s.key) + (s.tab === 'unit' ? '<div class="fbar"><div class="seg" data-ps="unit">' + PF_U.map(u => '<button class="' + (s.unit === u ? 'on' : '') + '" data-v="' + u + '">' + u + ' · ' + UNIT_PROD[u] + '</button>').join('') + '</div></div>' : ''),
+      bindFilter: (el, s, redraw) => { pfHeadBind(el, s, redraw); $$('[data-ps] button', el).forEach(b => b.onclick = () => { s.unit = b.dataset.v; persist('perf'); redraw(); }); $$('[data-pfu] button', el).forEach(b => b.onclick = () => { s.fu = b.dataset.v; redraw(); }); },
       body: s => {
         PF.ch = [];
         let h;
         if (s.tab === 'all') h = PF.all ? pfAllHtml(pfList(PF.all.bcs, Object.assign(PF.all.data, { [BCN]: S.docs })), s) : '<div class="empty"><p>' + esc(PF.err || 'Memuat data semua basecamp…') + '</p></div>';
         else if (s.tab === 'target') h = editBadge('Target Produksi') + pfTargetHtml(pfHere());
+        else if (s.tab === 'fc') h = editBadge('Target Produksi') + '<div class="pffc">' + pfFcHtml(pfHere(), s) + '</div>';
         else h = s.tab === 'unit' ? pfUnitHtml(pfHere(), s) : pfMainHtml(pfHere(), s);
         return '<div class="pfroot">' + h + '</div>';
       },
@@ -315,6 +473,8 @@ MODS.perf = {
         $$('[data-pfgo]', el).forEach(b => b.onclick = () => { const v = b.dataset.pfgo; if (v.startsWith('bc:')) { try { CFG.parent.pick(v.slice(3), 'perf'); } catch { } return; } s.unit = v; s.tab = 'unit'; persist('perf'); MODS.perf.render($('#main')); });
         $$('[data-pftg]', el).forEach(b => b.onclick = () => PG(pfTargetForm)(b.dataset.pftg));
         const q = $('[data-pfsrc]', el); if (q) q.onclick = () => PG(pfSrcForm)();
+        $$('[data-pffc]', el).forEach(b => b.onclick = () => PG(pfFcCfgForm)());
+        $$('[data-pfmix]', el).forEach(b => b.onclick = () => PG(pfMixForm)(b.dataset.pfmix));
       }
     });
     return ctl;
@@ -336,7 +496,34 @@ function pfPdfBars(R, rows) {
   d.setFontSize(7); d.setTextColor(...MUTED); d.text('Garis tegak = target 100%', M + L, y + 1.5); R.y = y + 6;
 }
 const pfPdfRow = (u, r) => ({ t: u + ' - ' + UNIT_NAME[u], p: r.tg ? r.real / r.tg : null, sub: num(r.real) + ' / ' + num(r.tg) + ' ' + PF_SAT[u] });
+async function pfFcReport(s) {
+  const D = pfHere(), { u, list } = pfSel(D, s), cfg = D.cfg;
+  if (!list.length) { toast('Belum ada unit aktif', 'err'); return; }
+  const F = pfFcSum(list), P = F.per, y = P.y, om = y.omzet || 0, rel = v => om ? cellR(pfP(v / om)) : '';
+  const R = await pdfReport({ title: 'Forecast Keuangan Produksi' + (u !== 'all' ? ' ' + u : ''), sub: BC + ' · target riil · keuntungan ' + pfP(cfg.markup) + ' dari HPP · ' + tgl(today(), true), orient: 'l', fname: 'Forecast' + (u !== 'all' ? '_' + u : '') });
+  R.kv([['Omzet / tahun', 'Rp ' + R_(y.omzet)], ['Biaya produksi / tahun', 'Rp ' + R_(y.biaya)], ['Laba bersih / tahun', 'Rp ' + R_(y.laba) + ' (' + pfP(om ? y.laba / om : null) + ')', y.laba < 0 ? 'red' : ''], ['Modal kerja disiapkan', 'Rp ' + R_(F.modal)]]);
+  R.h2('Asumsi per unit', 'per tahun');
+  R.table(['Unit', 'Target Unit', 'Target / hari', 'Target / tahun', 'Harga rata-rata', 'Omzet', 'Biaya BUASO', 'Laba bersih', 'Margin'], list.map(f => [f.u + ' - ' + UNIT_NAME[f.u], cellR(pfP(D.by[f.u].tg.pct)), cellR(N_(f.per.d.vol) + ' ' + PF_SAT[f.u]), cellR(N_(f.per.y.vol) + ' ' + PF_SAT[f.u]), cellR(R_(f.hr)), cellR(R_(f.per.y.omzet)), cellR(R_(f.per.y.biaya)), cellR(R_(f.per.y.laba)), cellR(pfP(f.per.y.omzet ? f.per.y.laba / f.per.y.omzet : null))]), { fs: 7.4 });
+  R.h2('Proyeksi laba rugi', 'Rupiah');
+  const row = (t, fn, pc, st) => [st ? { content: t, styles: st } : t].concat(PF_PER.map(([k]) => cellR(R_(fn(P[k], k)))), [pc == null ? '' : pc]);
+  const B = { fontStyle: 'bold' };
+  R.table(['Uraian'].concat(PF_PER.map(p => p[1]), ['% omzet']), [].concat(
+    list.map(f => ['Volume ' + f.u + ' (' + PF_SAT[f.u] + ')'].concat(PF_PER.map(([k]) => cellR(N_(f.per[k].vol))), [''])),
+    list.map(f => row('Penjualan ' + f.u + ' @ Rp ' + R_(f.hr), (r, k) => f.per[k].omzet, rel(f.per.y.omzet))),
+    [row('A. Total omzet', r => r.omzet, rel(om), B)],
+    BUASO.map(([q, n]) => row('   ' + n + ' (' + q + ')', r => r[q], rel(y[q]))),
+    [row('B. Total biaya produksi (HPP)', r => r.biaya, rel(y.biaya), B), row('C. Laba kotor (A - B)', r => r.lk, rel(y.lk), B), row('D. Bunga modal kerja', r => r.bunga, rel(y.bunga)), row('E. Laba bersih sebelum pajak (C - D)', r => r.laba, rel(y.laba), B)]
+  ), { fs: 7.4 });
+  R.h2('Anggaran pengeluaran & modal kerja');
+  R.table(['Kebutuhan dana'].concat(PF_PER.map(p => p[1])), BUASO.map(([q, n]) => [n + ' (' + q + ')'].concat(PF_PER.map(([k]) => cellR(R_(P[k][q]))))).concat([['Bunga modal kerja'].concat(PF_PER.map(([k]) => cellR(R_(P[k].bunga))))]), { fs: 7.4, foot: ['Anggaran kas keluar'].concat(PF_PER.map(([k]) => cellR(R_(P[k].biaya + P[k].bunga)))) });
+  R.para('Modal kerja yang perlu disiapkan = pengeluaran BUASO per bulan x masa perputaran = Rp ' + R_(F.modal) + '.', 7.8);
+  const m = F.mats.filter(x => x.ry > 0.5);
+  if (m.length) { R.h2('Rincian kebutuhan bahan'); R.table(['Bahan', 'Satuan', 'Unit'].concat(PF_PER.map(p => p[1]), ['Biaya / bulan', 'Biaya / tahun']), m.map(x => [x.n, x.sat, [...x.u].join(', ')].concat(PF_PER.map(([k]) => cellR(N_(x[k]))), [cellR(R_(x.rm)), cellR(R_(x.ry))])), { fs: 7, foot: ['Total bahan', '', '', '', '', '', '', cellR(R_(sum(m, 'rm'))), cellR(R_(sum(m, 'ry')))] }); }
+  R.para('Omzet = volume target riil x harga rata-rata (HPP + bunga price list + ' + pfP(cfg.markup) + ' atau harga manual). Metode biaya: ' + PF_MET[cfg.metode] + '.', 7.4);
+  R.sign(); await R.save();
+}
 async function pfReport(s) {
+  if (s.tab === 'fc') return pfFcReport(s);
   if (s.tab === 'all') { if (!PF.all) { toast('Data semua basecamp masih dimuat', 'err'); return; } return pfAllReport(pfList(PF.all.bcs, PF.all.data), s); }
   const D = pfHere(), { mode, key } = s, act = s.tab === 'unit' ? [D.by[s.unit]] : D.units.filter(x => x.aktif), nowK = pfKey(mode, today()), keys = pfSeries(mode, key).filter(k => k <= nowK);
   const R = await pdfReport({ title: 'Performance Produksi' + (s.tab === 'unit' ? ' ' + s.unit : ''), sub: BC + ' · ' + PF_MODE[mode].t + ' · ' + pfLabel(mode, key), orient: 'l', fname: 'Performance_' + (s.tab === 'unit' ? s.unit + '_' : '') + key });

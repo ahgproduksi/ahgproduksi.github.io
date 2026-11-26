@@ -607,3 +607,16 @@ table.sheetlike td.wrap { min-width: 160px; }
 .fccard.full { position: fixed; inset: 0; z-index: 60; border-radius: 0; display: flex; flex-direction: column; margin: 0; } .fccard.full .fcw { flex: 1; min-height: 0; } body.fcfull #main, body.fcfull .pres, body.fcfull .fcroot { animation: none !important; transform: none !important; opacity: 1 !important; }
 .fccard.full + * { display: none; }
 @media (max-width: 640px) { .fcpick { grid-template-columns: repeat(2, 1fr); gap: 8px; } .fchead { padding: 12px 14px; } .fchead dl { width: 100%; } .fchead dl div { flex: 1; } .fcbar { padding: 9px 10px; } .fcbar .srch, .fcbar select { width: 100%; max-width: none; } .fcbar .grow { display: none; } .fcbar.edit .btn span { display: none; } .fcbar.edit .g + .g { padding-left: 6px; } .fcleg { padding: 10px 14px; } .fcbar.edit [data-ed=save] span { display: inline; } }
+/* Performance › Target Unit & Forecast */
+.pftg td small, .pftg th small, .pfst td small { display: block; font-size: 11px; color: var(--muted); font-weight: 400; white-space: nowrap; }
+.pftg .pfpct { color: var(--navy); font-size: 14px; }
+.pftg tr.pfoff td { color: var(--muted); }
+.pfst td small { display: inline; }
+.pfst tr.pfsec td { background: var(--surface2); color: var(--navy); font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+.pfst tr.pfline td { border-top: 2px solid var(--line); }
+.pfst td:first-child { min-width: 260px; }
+.pfdot { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 7px; vertical-align: 0; }
+.pfstack { display: flex; height: 16px; border-radius: 5px; overflow: hidden; margin: 12px 0 4px; background: var(--surface2); }
+.pfstack i { display: block; height: 100%; border-right: 2px solid #fff; } .pfstack i:last-child { border-right: 0; }
+.pffc .kpis { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.buaso .tot small { color: rgba(255, 255, 255, .78); }
