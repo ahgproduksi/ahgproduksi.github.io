@@ -58,7 +58,7 @@ function kegHtml(s) {
           '<div class="kgv">' + (on ? '<b>' + rpS(v) + '</b><small class="' + (+k.m3 >= bep ? 't-ok' : 't-warn') + '">' + (+k.m3 >= bep ? '≥ BEP' : 'di bawah BEP') + '</small>' : '') + '</div></div>';
       }).join('');
   }).join('');
-  return '<div class="note">' + ic('file') + 'History kegiatan harian SCP ' + esc(BC) + ': jam operasi, hasil produksi, dan catatan kendala tiap hari (impor awal dari tab Kegiatan Google Sheet). BEP ' + num(bep) + ' M3/hari' + (inf.ket ? ' — ' + esc(inf.ket.replace(/ — BEP.*$/, '')) : '') + '. Klik hari untuk mengubah catatan.</div>' +
+  return '<div class="note">' + ic('file') + 'History kegiatan harian SCP ' + esc(BC) + ': jam operasi, hasil produksi, dan catatan kendala tiap hari (impor awal dari tab Kegiatan Google Sheet). BEP ' + num(bep) + ' M3/hari' + (inf.ket ? ' — ' + esc(inf.ket.replace(/ — BEP.*$/, '')) : '') + '. Klik hari untuk melihat / mengubah catatan.</div>' + (typeof jxEditBar === 'function' ? jxEditBar({ keg: true }) : '') +
     '<div class="kpis">' + kpi('Hari produksi', num(x.prod.length) + ' hari', 'off / perbaikan ' + num(x.offHari) + ' hari · ' + esc(x.r.label)) +
     kpi('Hasil produksi', num(x.m3) + ' M3', num(x.ton) + ' ton · ' + num(x.rit) + ' rit', 'good') +
     kpi('Rata-rata per hari produksi', num(avg) + ' M3', x.prod.filter(k => +k.m3 >= bep).length + ' dari ' + x.prod.length + ' hari ≥ BEP ' + num(bep) + ' M3', avg >= bep ? 'good' : 'warn') +
@@ -75,6 +75,7 @@ function kegHtml(s) {
 // total per bulan dari dokumen kegiatan (bukan angka sheet) → ikut berubah bila catatan diubah di aplikasi
 function kegM(ym, k) { const a = all('keg').filter(d => String(d.tgl).startsWith(ym) && +d.m3 > 0); return k === 'nilai' ? sum(a, d => (+d.m3) * (+d.harga || kegHarga())) : sum(a, k); }
 function kegBind(el) {
+  if (typeof jxEditBind === 'function') jxEditBind(el);
   $$('[data-kg]', el).forEach(r => { r.onclick = () => kegDetail(r.dataset.kg); r.onkeydown = e => { if (e.key === 'Enter') kegDetail(r.dataset.kg); }; });
 }
 function kegDetail(id) {
@@ -86,10 +87,12 @@ function kegDetail(id) {
       ['Tonase', on ? num(k.ton) + ' ton' : '-'], ['Volume', on ? num(k.m3) + ' M3' : '-'], ['Rit', on ? num(k.rit) : '-'], ['Jam produktif', k.produktif || '-'],
       ['Harga maklon', rp(+k.harga || kegHarga()) + ' / M3'], ['Nilai jasa', on ? rp((+k.m3) * (+k.harga || kegHarga())) : '-'], ['Customer', k.cust ? custName(k.cust) : KEG_CUST], ['Dicatat oleh', (k._by || '-') + ' · ' + tglJam(k._at)]]) +
       ((k.catatan || []).length ? '<h4 class="sub">Catatan kegiatan &amp; kendala</h4><ul class="kgn">' + k.catatan.map(t => '<li>' + kegNote(t) + '</li>').join('') + '</ul>' : ''),
-    buttons: CFG.all ? [] : [{ id: 'ed', t: 'Ubah', icon: 'edit', pri: true, fn: m => { m.close(); setTimeout(() => kegForm(get(id)), 250); } }]
+    buttons: CFG.all ? [] : [{ id: 'del', t: 'Hapus', icon: 'trash', danger: true, fn: m => { m.close(); setTimeout(() => editGate(JX_AREA).then(async ok => { if (ok && await confirmBox('Hapus catatan kegiatan', 'Catatan ' + tgl(k.tgl) + ' akan dihapus untuk semua pengguna. Lanjutkan?')) { remove(id); toast('Catatan kegiatan dihapus'); } }), 250); } },
+      { id: 'ed', t: 'Ubah', icon: 'edit', pri: true, fn: m => { m.close(); setTimeout(() => kegForm(get(id)), 250); } }]
   });
 }
-function kegForm(d) {
+const kegForm = d => (typeof JXG === 'function' ? JXG(kegFormRaw) : kegFormRaw)(d);
+function kegFormRaw(d) {
   const last = kegAll()[0] || {};
   const v = d ? Object.assign({}, d, { catatanTxt: (d.catatan || []).join('\n') }) : { tgl: today(), material: 'Batu andesit', harga: last.harga || kegHarga(), cust: last.cust || '', unit: 'SCP', jam: '08.00 - 16.00' };
   openForm({

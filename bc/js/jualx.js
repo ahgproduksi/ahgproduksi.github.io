@@ -50,7 +50,8 @@ function jxDetail(id) {
     title: 'Tagihan ' + (d.noTagih ? 'No. ' + d.noTagih + ' · ' : '') + (d.nama || ''), sub: (d.produk || '') + ' · periode ' + (d.periode || tgl(d.tgl)),
     html: infoGrid([['Periode produksi', d.periode], ['Dari', tgl(d.dari)], ['Sampai', tgl(d.sampai)], ['Unit', d.unit], ['Tonase', num(d.ton) + ' ton'], ['Volume', jxVol(d)],
       ['Nilai tagihan', rp(d.nilai)], ['Terbayar ke PT. AHG', rp(d.masuk)], ['Potongan deposit', rp(d.potong)], ['Sisa', rp(Math.max(0, d.nilai - d.masuk - (d.potong || 0)))],
-      d.piutAwal != null ? ['Deposit awal periode', rp(d.piutAwal)] : null, d.piutAkhir != null ? ['Deposit akhir periode', rp(d.piutAkhir)] : null, ['Status', d.status], d.ket ? ['Keterangan', d.ket] : null, ['Sumber', 'Sheet ' + (d.sheet || '')]])
+      d.piutAwal != null ? ['Deposit awal periode', rp(d.piutAwal)] : null, d.piutAkhir != null ? ['Deposit akhir periode', rp(d.piutAkhir)] : null, ['Status', d.status], d.ket ? ['Keterangan', d.ket] : null, ['Sumber', 'Sheet ' + (d.sheet || '')]]),
+    buttons: jxCan() ? jxEditBtns(d, () => jxTagihForm(get(d.id))) : []
   });
   detail({
     title: d.nama || d.proyek || 'Penjualan', sub: (d.kat || '') + ' · ' + (d.tipe === 'piutang' ? 'Piutang' : d.tipe === 'bayar' ? 'Pembayaran piutang' : d.kat === 'Internal' ? 'Tagihan proyek internal' : 'SPH / order retail') + ' · ' + monthLabel(d.bulan),
@@ -60,7 +61,8 @@ function jxDetail(id) {
       d.profit ? ['Profit', rp(d.profit)] : null, d.kirim || d.sisa ? ['Terkirim / sisa', num(d.kirim) + ' / ' + num(d.sisa) + ' ' + (d.sat || '')] : null, ['Status', d.status], ['Pembayaran', d.bayar],
       d.tglBayar ? ['Tanggal pembayaran', tgl(d.tglBayar)] : null, d.jadwal ? ['Jadwal kirim', tgl(d.jadwal)] : null, d.ket ? ['Keterangan', d.ket] : null, ['Sumber', 'Sheet ' + (d.sheet || '') + (d.row ? ' baris ' + d.row : '')]]) +
       (d.bukti || d.bukti2 ? '<p style="margin-top:10px">' + [d.bukti, d.bukti2].filter(Boolean).map((u, i) => '<a class="btn ghost sm" href="' + esc(u) + '" target="_blank" rel="noopener">' + ic('file') + 'Bukti transfer' + (i ? ' 2' : '') + '</a>').join(' ') + '</p>' : ''),
-    buttons: d.cust && custGet(d.cust) ? [{ id: 'cu', t: 'Lihat customer', icon: 'cust', fn: m => { m.close(); setTimeout(() => custDetail(d.cust), 250); } }] : []
+    buttons: (d.cust && custGet(d.cust) ? [{ id: 'cu', t: 'Lihat customer', icon: 'cust', fn: m => { m.close(); setTimeout(() => custDetail(d.cust), 250); } }] : [])
+      .concat(jxCan() && d.tipe === 'order' ? jxEditBtns(d, () => jxForm(get(d.id))) : [])
   });
 }
 function jxTable(rows, o) {
@@ -249,11 +251,11 @@ function jxJualHtml(s) {
   return '<div class="note">' + ic('file') + (keg
     ? 'Penjualan ' + esc(BC) + ': nilai harian = volume produksi (M3) di History Kegiatan × harga jasa maklon; uang masuk dan potongan deposit dari History Tagihan (Google Sheet Rekapitulasi Produksi SCP Tempuran).'
     : 'Penjualan ' + esc(BC) + ' dari rekap Google Sheet (diimpor ke kartu ini). Nilai penjualan eksternal = nilai barang yang sudah terkirim; internal = nilai yang ditagihkan.') + '</div>' +
-    jxKpis(x) + (x.tgAll.length ? jxTagihTable(x) : '') + jxProdTable(x.rows, x.r) + jxBucketTable(x) +
+    jxEditBar({ tagih: x.tgAll.length || (typeof kegOn === 'function' && kegOn()) }) + jxKpis(x) + (x.tgAll.length ? jxTagihTable(x) : '') + jxProdTable(x.rows, x.r) + jxBucketTable(x) +
     '<section class="card"><div class="chead"><h3>Rincian penjualan · ' + esc(x.r.label) + '</h3><div class="cmeta">' + x.n + ' baris</div></div>' + jxTable(x.rows) + '</section>';
 }
 function jxJualBind(el, s, redraw) {
-  jxBind(el);
+  jxBind(el); jxEditBind(el);
   $$('tr[data-jxgo]', el).forEach(tr => tr.onclick = e => { e.stopPropagation(); const [p, ref] = tr.dataset.jxgo.split(':'); s.per = p; s.ref = ref; jxSyncMonth(s); redraw(); });
 }
 async function jxJualReport(s) {
@@ -443,4 +445,128 @@ function jxKasMini(s) {
   const t = jxTot(jxRows({ month: s.month || curMonth() }).filter(d => d.tipe !== 'piutang')), a0 = jxTot(jxAll());
   return '<section class="card pad" style="margin-bottom:14px"><div class="chead" style="padding:0 0 10px"><h3>Penjualan unit dari rekap sheet · ' + esc(monthLabel(s.month || curMonth())) + '</h3><button class="btn ghost sm" data-jxgo>Lihat rincian' + ic('right') + '</button></div><div class="kpis" style="margin:0">' +
     kpi('Eksternal (uang masuk)', rpS(t.masukEks), 'retail', 'good') + kpi('Internal (ditagihkan)', rpS(t.tagihInt), 'HO / proyek PT. AHG') + kpi('Piutang internal', rpS(a0.piutInt), 'semua periode', a0.piutInt ? 'warn' : '') + kpi('Piutang eksternal', rpS(a0.piutEks), 'semua periode', a0.piutEks ? 'warn' : '') + '</div></section>';
+}
+
+function jxEditBtns(d, edit) {
+  return [{ id: 'del', t: 'Hapus', icon: 'trash', danger: true, fn: m => { m.close(); setTimeout(() => jxDel(d), 250); } }, { id: 'ed', t: 'Ubah', icon: 'edit', pri: true, fn: m => { m.close(); setTimeout(edit, 250); } }];
+}
+const jxDel = d => editGate(JX_AREA).then(async ok => { if (!ok) return; if (await confirmBox('Hapus data penjualan', (d.nama || '') + ' · ' + tgl(d.tgl) + ' · ' + rp(d.nilai) + ' akan dihapus untuk semua pengguna. Lanjutkan?')) { remove(d.id); toast('Data penjualan dihapus'); } });
+/* ---------- Edit penjualan (kata sandi edit 250798 = bw_cfg pin_edit; server bc_put menolak jualx/keg tanpa kunci terbuka) ---------- */
+const JX_AREA = 'Kartu Penjualan';
+const JXG = fn => gated(JX_AREA, fn);
+const jxCan = () => !CFG.all; // Rekap Semua Basecamp hanya membaca
+const jxClean = d => { const o = Object.assign({}, d); Object.keys(o).forEach(k => { if (k[0] === '_' || k === 'id') delete o[k]; }); return o; };
+const jxBayarOf = (nilai, masuk) => +masuk >= +nilai - 0.5 && +nilai > 0 ? 'Lunas' : +masuk > 0.5 ? 'Sebagian' : 'Belum bayar';
+// customer dari nama: pakai yang ada (kartu Customer) atau buat baru supaya Customer Unit tetap terhubung
+function jxCustFor(nama, kat) {
+  const n = String(nama || '').trim(); if (!n) return '';
+  const key = n.toUpperCase().replace(/[^A-Z0-9]+/g, '');
+  const c = custList().find(x => String(x.nama || '').toUpperCase().replace(/[^A-Z0-9]+/g, '') === key);
+  if (c) return c.id;
+  return save('cust', { nama: n, jenis: kat === 'Internal' ? 'Internal' : 'Eksternal', pic: '', ktp: '', nik: '', npwp: '', wa: '', hp: '', email: '', alamat: '', ket: 'Dibuat dari Kartu Penjualan' });
+}
+const jxForm = JXG(d => {
+  const src = jxAll(), last = jxSales().find(x => !x.keg) || {};
+  const v = d ? Object.assign({}, d) : { tgl: today(), kat: last.kat || 'Eksternal', unit: last.unit || 'SCP', produk: last.produk || '', sat: last.sat || 'M3', status: 'Selesai', nama: last.nama || '' };
+  if (v.kirim == null || v.kirim === '') v.kirim = v.vol;
+  openForm({
+    title: d ? 'Ubah Penjualan' : 'Tambah Penjualan', sub: BC + ' · perubahan langsung terhitung di Cash Flow, Customer, Marketing, dan Rekap Semua Basecamp', value: v, wide: true,
+    onDelete: d ? () => remove(d.id) : null,
+    fields: [
+      { k: 'tgl', label: 'Tanggal', type: 'date', req: true }, { k: 'kat', label: 'Kategori', type: 'select', req: true, opts: JX_KAT.map(k => ({ v: k, t: k === 'Internal' ? 'Internal (HO / proyek PT. AHG)' : 'Eksternal (retail)' })) },
+      { k: 'nama', label: 'Customer / proyek', type: 'list', req: true, opts: () => [...new Set(custList().map(c => c.nama).concat(src.map(x => x.nama)).filter(Boolean))] },
+      { k: 'unit', label: 'Unit', type: 'select', opts: UNITS.concat('Umum') }, { k: 'produk', label: 'Produk', type: 'list', opts: () => [...new Set(src.map(x => x.produk).filter(Boolean))] },
+      { k: 'sph', label: 'No. SPH / SO / invoice' },
+      { k: 'vol', label: 'Volume', type: 'num', suffix: x => x.sat || '' }, { k: 'sat', label: 'Satuan', type: 'list', opts: ['M3', 'Ton', 'Pcs', 'Unit', 'M2', 'Liter', 'LS'] },
+      { k: 'kirim', label: 'Volume terkirim', type: 'num', suffix: x => x.sat || '', help: 'Penjualan eksternal dihitung dari volume yang sudah terkirim' }, { k: 'ton', label: 'Tonase', type: 'num', suffix: 'ton' },
+      { k: 'nilai', label: 'Nilai penjualan / tagihan', type: 'money', req: 'zero' }, { k: 'masuk', label: 'Uang masuk', type: 'money' },
+      { k: 'tglBayar', label: 'Tanggal pembayaran', type: 'date' }, { k: 'status', label: 'Status', type: 'select', opts: JX_ST },
+      { k: 'bayar', label: 'Pembayaran', type: 'list', opts: ['Lunas', 'Sebagian', 'Belum bayar', 'Sudah DP'], help: 'Kosong = otomatis dari uang masuk' },
+      { k: 'info', type: 'html', html: x => '<div class="note">Sisa belum terbayar: <b>' + rp(Math.max(0, (+x.nilai || 0) - (+x.masuk || 0))) + '</b></div>' },
+      { k: 'ket', label: 'Keterangan', type: 'textarea', rows: 2, full: true }
+    ],
+    onSave: x => {
+      const o = Object.assign(d ? jxClean(d) : { src: 'app', proyek: '', sheet: 'Kartu Penjualan' }, {
+        tipe: 'order', tgl: x.tgl, bulan: x.tgl.slice(0, 7), kat: x.kat, nama: String(x.nama).trim(), unit: x.unit || 'Umum', produk: x.produk || '', sph: x.sph || '',
+        vol: +x.vol || 0, sat: x.sat || '', kirim: x.kirim === '' || x.kirim == null ? +x.vol || 0 : +x.kirim, ton: +x.ton || 0, nilai: +x.nilai || 0, masuk: +x.masuk || 0,
+        tglBayar: x.tglBayar || '', status: x.status || 'Selesai', bayar: !x.bayar || ['Lunas', 'Sebagian', 'Belum bayar'].includes(x.bayar) ? jxBayarOf(x.nilai, x.masuk) : x.bayar, ket: x.ket || ''
+      });
+      if (!d || d.nama !== o.nama || !o.cust) o.cust = jxCustFor(o.nama, o.kat);
+      save('jualx', o, d ? d.id : uid('jx'));
+      toast('Penjualan ' + tgl(o.tgl) + ' disimpan · ' + rp(o.nilai));
+    }
+  });
+});
+// tagihan periode (Tempuran: History Tagihan jasa maklon)
+const jxTagihForm = JXG(d => {
+  const inf = jxInfo() || {}, T = jxTagih(), last = T[T.length - 1] || {};
+  const v = d ? Object.assign({}, d) : { noTagih: (+last.noTagih || T.length) + 1, dari: last.sampai ? jxAdd(last.sampai, 1) : today(), sampai: today(), produk: 'Jasa maklon batu andesit', sat: 'M3' };
+  openForm({
+    title: d ? 'Ubah Tagihan' : 'Tambah Tagihan', sub: BC + ' · ' + (inf.nama || last.nama || 'customer jasa maklon') + ' · terbayar dan potongan deposit mengurangi sisa tagihan', value: v, wide: true, onDelete: d ? () => remove(d.id) : null,
+    fields: [
+      { k: 'noTagih', label: 'No', type: 'num', req: true }, { k: 'produk', label: 'Uraian', type: 'list', opts: ['Jasa maklon batu andesit', 'Parkir kendaraan DT', 'Selisih harga maklon'] },
+      { k: 'dari', label: 'Periode produksi dari', type: 'date', req: true }, { k: 'sampai', label: 'Sampai', type: 'date', req: true },
+      { k: 'hit', type: 'html', html: x => { if (!x.dari || !x.sampai) return ''; const a = all('keg').filter(k => k.tgl >= x.dari && k.tgl <= x.sampai && +k.m3 > 0); return '<div class="note">History Kegiatan periode ini: <b>' + num(sum(a, 'm3')) + ' M3</b> · ' + num(sum(a, 'ton')) + ' ton · ' + a.length + ' hari · nilai ' + rp(sum(a, k => k.m3 * (+k.harga || kegHarga()))) + ' <button type="button" class="btn ghost sm" data-tgisi>Isi dari kegiatan</button></div>'; } },
+      { k: 'ton', label: 'Tonase', type: 'num', suffix: 'ton' }, { k: 'vol', label: 'Volume', type: 'num', suffix: 'M3' },
+      { k: 'nilai', label: 'Nilai tagihan', type: 'money', req: true }, { k: 'masuk', label: 'Terbayar ke PT. AHG', type: 'money' }, { k: 'potong', label: 'Potongan deposit', type: 'money' },
+      { k: 'sisa', type: 'html', html: x => '<div class="note">Sisa tagihan: <b>' + rp(Math.max(0, (+x.nilai || 0) - (+x.masuk || 0) - (+x.potong || 0))) + '</b></div>' },
+      { k: 'ket', label: 'Keterangan', type: 'textarea', rows: 2, full: true }
+    ],
+    onSave: x => {
+      if (x.sampai < x.dari) { toast('Tanggal "sampai" sebelum "dari"', 'err'); return false; }
+      const sisa = Math.max(0, (+x.nilai || 0) - (+x.masuk || 0) - (+x.potong || 0));
+      const per = tgl(x.dari, true) + ' - ' + tgl(x.sampai, true);
+      const o = Object.assign(d ? jxClean(d) : { src: 'app', sheet: 'Kartu Penjualan', proyek: 'Jasa maklon ' + BC }, {
+        tipe: 'tagih', kat: 'Eksternal', noTagih: +x.noTagih, produk: x.produk || '', dari: x.dari, sampai: x.sampai, tgl: x.sampai, bulan: x.sampai.slice(0, 7), periode: per,
+        ton: +x.ton || 0, vol: +x.vol || 0, sat: 'M3', nilai: +x.nilai || 0, masuk: +x.masuk || 0, potong: +x.potong || 0, ket: x.ket || '',
+        status: sisa < 0.5 ? 'Lunas' : (+x.masuk || +x.potong) ? 'Sebagian' : 'Ditagihkan', bayar: sisa < 0.5 ? 'Lunas' : 'Sisa ' + rp(sisa),
+        nama: (d && d.nama) || inf.nama || last.nama || '', cust: (d && d.cust) || inf.cust || last.cust || '', unit: (d && d.unit) || 'SCP'
+      });
+      save('jualx', o, d ? d.id : uid('jx'));
+      toast('Tagihan No. ' + o.noTagih + ' disimpan');
+    }
+  });
+});
+// isi volume & nilai tagihan dari History Kegiatan (tombol di formulir tagihan)
+document.addEventListener('click', e => {
+  const b = e.target.closest && e.target.closest('[data-tgisi]'); if (!b) return;
+  const f = b.closest('form'); if (!f) return;
+  const g = k => f.querySelector('[data-k="' + k + '"]');
+  const a = all('keg').filter(k => k.tgl >= g('dari').value && k.tgl <= g('sampai').value && +k.m3 > 0);
+  const setv = (k, val) => { const i = g(k); if (!i) return; i.focus(); i.value = val; i.dispatchEvent(new Event('input', { bubbles: true })); i.blur(); };
+  setv('ton', nf2.format(sum(a, 'ton'))); setv('vol', nf2.format(sum(a, 'm3'))); setv('nilai', nf0.format(Math.round(sum(a, k => k.m3 * (+k.harga || kegHarga())))));
+});
+// pengaturan jasa maklon (deposit, harga, BEP, target) — dokumen info
+const jxInfoForm = JXG(() => {
+  const d = jxInfo() || { tipe: 'info', bulanan: [] };
+  const v = Object.assign({}, d, { tgtTxt: (d.bulanan || []).map(b => b.m + ' ' + b.target).join('\n') });
+  openForm({
+    title: 'Pengaturan Jasa Maklon', sub: BC + ' · dipakai Penjualan dan History Kegiatan', value: v, wide: true,
+    fields: [
+      { k: 'nama', label: 'Customer', type: 'list', opts: () => custList().map(c => c.nama) }, { k: 'deposit', label: 'Deposit customer (total)', type: 'money' },
+      { k: 'harga', label: 'Harga jasa maklon', type: 'money', suffix: '/ M3', help: 'Bawaan untuk catatan kegiatan baru' }, { k: 'faktor', label: 'Faktor ton → M3', type: 'num', help: 'M3 = ton ÷ faktor' },
+      { k: 'bep', label: 'BEP produksi', type: 'num', suffix: 'M3/hari' }, { k: 'targetHari', label: 'Target produksi', type: 'num', suffix: 'M3/hari' },
+      { k: 'biayaHari', label: 'Biaya tetap per hari', type: 'money' }, { k: 'ket', label: 'Keterangan', type: 'textarea', rows: 2, full: true },
+      { k: 'tgtTxt', label: 'Target bulanan (satu baris: YYYY-MM target M3)', type: 'textarea', rows: 5, full: true, ph: '2026-12 5000' }
+    ],
+    onSave: x => {
+      const old = new Map((d.bulanan || []).map(b => [b.m, b]));
+      const bul = String(x.tgtTxt || '').split('\n').map(l => /^(\d{4}-\d{2})\s+([\d.,]+)/.exec(l.trim())).filter(Boolean).map(m => Object.assign({}, old.get(m[1]) || { m: m[1] }, { m: m[1], target: parseNum(m[2]) }));
+      const o = Object.assign(jxClean(d), { tipe: 'info', nama: x.nama || '', cust: x.nama && x.nama !== d.nama ? jxCustFor(x.nama, 'Eksternal') : d.cust || '', deposit: +x.deposit || 0, harga: +x.harga || 0, faktor: +x.faktor || 1.3,
+        bep: +x.bep || 0, targetHari: +x.targetHari || 0, biayaHari: +x.biayaHari || 0, ket: x.ket || '', bulanan: bul.sort((a, b) => a.m.localeCompare(b.m)) });
+      save('jualx', o, d.id || 'jxinfo' + BCN.replace(/[^A-Za-z0-9]/g, '').toLowerCase());
+      toast('Pengaturan jasa maklon disimpan');
+    }
+  });
+});
+function jxEditBar(o) {
+  if (!jxCan()) return '';
+  o = o || {};
+  return editBadge() + '<div class="jxtools">' + (o.keg ? '<button class="btn sm pri" data-jxe="keg">' + ic('plus') + 'Catat kegiatan</button>' : '<button class="btn sm pri" data-jxe="add">' + ic('plus') + 'Tambah penjualan</button>') +
+    (o.tagih ? '<button class="btn sm ghost" data-jxe="tagih">' + ic('plus') + 'Tambah tagihan</button><button class="btn sm ghost" data-jxe="info">' + ic('edit') + 'Pengaturan maklon</button>' : '') +
+    '<span class="muted">' + ic('lock') + (editOpen() ? 'Kunci edit terbuka — klik baris untuk mengubah atau menghapus' : 'Tambah, ubah, dan hapus memerlukan kata sandi edit') + '</span></div>';
+}
+function jxEditBind(el) {
+  bindRelock(el);
+  $$('[data-jxe]', el).forEach(b => b.onclick = e => { e.stopPropagation(); const k = b.dataset.jxe; if (k === 'add') jxForm(); else if (k === 'tagih') jxTagihForm(); else if (k === 'info') jxInfoForm(); else if (k === 'keg' && typeof kegForm === 'function') kegForm(); });
 }

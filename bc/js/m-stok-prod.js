@@ -423,14 +423,14 @@ MODS.jual = {
       key: 'jual', st, report: s => s.tab === 'keg' && kg ? kegReport(s) : s.tab === 'jx' && JXON() ? jxJualReport(s) : jualReport(s),
       tabs: (jx ? [{ k: 'jx', t: 'Penjualan Rekap Sheet' }] : []).concat(kg ? [{ k: 'keg', t: 'History Kegiatan' }] : []).concat([{ k: 'rekap', t: 'Rekap Penjualan' }, { k: 'kirim', t: 'Rincian Pengiriman' }, { k: 'hpp', t: 'Breakdown HPP (BUASO)' }]),
       actions: (kg ? [{ id: 'keg', t: 'Catat Kegiatan', pri: true, icon: 'cal' }] : []).concat([{ id: 'kirim', t: 'Catat Pengiriman', pri: !kg, icon: 'jadwal' }]),
-      on: { kirim: () => kirimForm(), keg: () => kegForm() },
+      on: { kirim: () => gated('Kartu Penjualan', kirimForm)(), keg: () => kegForm() },
       filter: s => s.tab === 'keg' && kg ? jxPerBar(s) : per(s) ? jxPerBar(s, jxUnitOpts(s) + jenisSel(s)) : periodBar(s, 'jual', jenisSel(s)),
       bindFilter: (el, s, redraw) => { s._redraw = redraw; if (per(s)) jxPerBind(el, s, redraw); },
       body: s => s.tab === 'keg' && kg ? kegHtml(s) : s.tab === 'jx' && JXON() ? jxJualHtml(s) : jualHtml(s),
       bind: (el, s, fill) => {
         if (s.tab === 'keg' && kg) return kegBind(el);
         if (s.tab === 'jx' && JXON()) return jxJualBind(el, s, () => s._redraw ? s._redraw() : fill(true));
-        $$('[data-row]', el).forEach(tr => tr.onclick = () => s.tab === 'kirim' ? kirimForm(get(tr.dataset.row)) : soDetail(tr.dataset.row));
+        $$('[data-row]', el).forEach(tr => tr.onclick = () => s.tab === 'kirim' ? gated('Kartu Penjualan', kirimForm)(get(tr.dataset.row)) : soDetail(tr.dataset.row));
       }
     });
   },
