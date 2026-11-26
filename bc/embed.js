@@ -101,11 +101,12 @@
     const bcs = R0.bcs; let html;
     const head = '<div class="phead"><div class="ptitle"><span class="ptile">' + ic(mod ? mod.icon : 'home') + '</span><div><h1>' + esc(mod ? mod.title : 'Rekap Semua Basecamp') + '</h1><p>' +
       esc(mod ? 'Ringkasan kartu ini di setiap basecamp. Pilih basecamp untuk membuka dan mengisi data.' : 'Ringkasan operasional seluruh basecamp PT. Armada Hada Graha — unit AMP, CMP, SCP, dan PCP.') + '</p></div></div>' +
-      '<div class="pact"><button class="btn ghost" data-rf>' + ic('refresh') + '<span>Muat ulang</span></button>' + (r === 'perf' ? '<button class="btn dark" data-pfpdf>' + ic('print') + '<span>Cetak PDF</span></button>' : mod ? '' : '<button class="btn dark" data-pdf>' + ic('print') + '<span>Cetak PDF</span></button>') + '</div></div>';
+      '<div class="pact"><button class="btn ghost" data-rf>' + ic('refresh') + '<span>Muat ulang</span></button>' + (r === 'perf' ? '<button class="btn dark" data-pfpdf>' + ic('print') + '<span>Cetak PDF</span></button>' : r === 'jual' ? '<button class="btn dark" data-jxpdf>' + ic('print') + '<span>Cetak PDF</span></button>' : mod ? '' : '<button class="btn dark" data-pdf>' + ic('print') + '<span>Cetak PDF</span></button>') + '</div></div>';
     if (!bcs.length) { html = head + '<div class="empty">' + ic('home') + '<p>Belum ada basecamp.</p></div>'; put(main, html); return; }
     if (r === 'flow') { if (main._h !== 'flow' || !APP.ctl) { main._h = 'flow'; main._f = 1; APP.ctl = MODS.flow.render(main); } return; }
     if (main._f) { main._f = 0; main._h = ''; APP.ctl = null; }
     if (r === 'perf') { pfAllMount(main, head, bcs, R0.data); const rf = $('[data-rf]', main); if (rf) rf.onclick = () => loadAll(true); return; }
+    if (r === 'jual' && typeof jxAllHtml === 'function') { jualAll(main, head); return; }
     if (mod) {
       html = head + (R0.err ? '<div class="note">' + esc(R0.err) + '</div>' : '') + '<div class="cards">' + bcs.map((bc, i) => {
         const s = sumOf(bc, r) || {};
@@ -137,6 +138,39 @@
       '<div class="cards">' + st.map(([bc, s], i) => '<a class="mcard" href="#" data-pick="' + esc(bc) + '" style="--d:' + (i * 35) + 'ms;--bct:' + bcTone(bc) + '"><div class="mtop"><span class="mic">' + ic('home') + '</span><em>' + String(i + 1).padStart(2, '0') + '</em></div><h3>Basecamp ' + esc(bc) + '</h3><p>' + (s ? s.docs + ' catatan · ' + s.mp + ' man power aktif' : 'Memuat…') + '</p>' +
         '<div class="mstat ' + (s && s.telat ? 'warn' : '') + '"><b>' + (s ? 'Saldo ' + rpS(s.saldo) : '') + '</b><span>' + (s ? 'Penjualan ' + rpS(s.jual) + ' bulan ini' : '') + '</span></div><span class="mgo">Buka basecamp' + ic('right') + '</span></a>').join('') + '</div>';
     put(main, html);
+  }
+  /* Penjualan semua basecamp: list per basecamp + grand total, rentang mingguan / bulanan / tahunan (jualx.js jxAllHtml) */
+  const JA = stateOf('jualAll', { per: '', ref: '', q: '', unit: '', jenis: '', more: {} });
+  if (!JA.more) JA.more = {};
+  const jaList = () => R0.bcs.map(bc => ({ bc, x: R0.data[bc] ? withDocs(R0.data[bc], () => jxBcData(JA)) : null }));
+  function jualAll(main, head) {
+    if (main._h !== 'jualall' || !$('.jxall', main)) {
+      main._h = 'jualall'; main._f = 0;
+      main.innerHTML = head + '<div class="jxall"><div class="pfilter"></div><div class="pres"></div></div>';
+      const rf = $('[data-rf]', main); if (rf) rf.onclick = () => loadAll(true);
+      const pd = $('[data-jxpdf]', main); if (pd) pd.onclick = () => runReport(() => jxAllReport(jaList(), JA));
+      jaFilter(main);
+    }
+    jaFill(main);
+  }
+  function jaFilter(main) {
+    const f = $('.jxall .pfilter', main);
+    f.innerHTML = jxPerBar(JA, jxUnitOpts(JA) + '<select data-fk="jenis"><option value="">Internal & eksternal</option><option value="internal"' + (JA.jenis === 'internal' ? ' selected' : '') + '>Internal PT. AHG</option><option value="eksternal"' + (JA.jenis === 'eksternal' ? ' selected' : '') + '>Eksternal / Retail</option></select>');
+    const redraw = () => { jaFilter(main); jaFill(main, true); };
+    jxPerBind(f, JA, redraw);
+    $$('[data-fk]', f).forEach(el => el.addEventListener(el.type === 'search' ? 'input' : 'change', (el.type === 'search' ? debounce : g => g)(() => { JA[el.dataset.fk] = el.value; jaFill(main, true); }, 180)));
+  }
+  function jaFill(main, force) {
+    const res = $('.jxall .pres', main); if (!res) return;
+    const html = (R0.err ? '<div class="note">' + esc(R0.err) + '</div>' : '') + jxAllHtml(jaList(), JA) + (R0.busy ? '<div class="note">Memuat data basecamp lainnya…</div>' : '');
+    if (!force && res._h === html) return;
+    const sy = window.scrollY;
+    res._h = html; res.innerHTML = html;
+    $$('[data-pick]', res).forEach(b => b.onclick = e => { e.preventDefault(); pick(b.dataset.pick, 'jual'); });
+    $$('[data-jxmore]', res).forEach(b => b.onclick = () => { JA.more[b.dataset.jxmore] = !JA.more[b.dataset.jxmore]; jaFill(main, true); });
+    $$('tr[data-jxgo]', res).forEach(tr => tr.onclick = () => { const [p, ref] = tr.dataset.jxgo.split(':'); JA.per = p; JA.ref = ref; jaFilter(main); jaFill(main, true); window.scrollTo(0, 0); });
+    $$('tr[data-jx]', res).forEach(tr => tr.onclick = e => { e.stopPropagation(); const bc = tr.closest('section') && tr.closest('section').querySelector('.bcbadge'); const name = bc ? bc.textContent : ''; if (name && R0.data[name]) withDocs(R0.data[name], () => jxDetail(tr.dataset.jx)); });
+    if (!force) window.scrollTo(0, sy);
   }
   // gambar ulang hanya bila isi berubah (tanpa animasi berulang / posisi gulir melompat saat data basecamp masuk)
   function put(main, html) { if (main._h === html && main.firstChild) return; main._h = html; main.innerHTML = html; bind(main); }
