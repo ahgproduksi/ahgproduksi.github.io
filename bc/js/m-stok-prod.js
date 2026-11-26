@@ -14,32 +14,11 @@ MODS.stok = {
       filter: s => { s.umum = true; return periodBar(s.tab === 'mutasi' ? s : Object.assign({}, s, { month: undefined })); },
       body: s => {
         const units = s.unit ? [s.unit] : UNITS.concat('Umum');
+        const upd = stokUpdInfo();
         if (s.tab === 'saldo') {
-          return units.map(u => {
-            const rows = stockSaldo(u).filter(r => qMatch(s.q, r.m.nama, r.m.kat));
-            const tone = { Menipis: 0, Habis: 0 }; rows.forEach(r => tone[r.status] = (tone[r.status] || 0) + 1);
-            if (!s.unit && !rows.some(r => r.masuk || r.prod || r.keluar || r.adj)) return '';
-            return '<section class="card"><div class="chead"><div>' + unitChip(u) + '<h3>' + esc(UNIT_NAME[u]) + '</h3></div><div class="cmeta">' + rows.length + ' material · posisi per ' + tgl(stokPosisi(rows)) + (tone.Menipis ? ' · <b class="t-warn">' + tone.Menipis + ' menipis</b>' : '') + (tone.Habis ? ' · <b class="t-bad">' + tone.Habis + ' habis</b>' : '') + '</div></div>' +
-              table([
-                { t: 'Material', f: r => r.m.nama, cls: 'strong' }, { t: 'Kategori', f: r => r.m.kat }, { t: 'Satuan', f: r => r.m.sat },
-                { t: 'Masuk', f: r => r.masuk, num: true }, { t: 'Keluar', f: r => r.keluar, num: true }, { t: 'Pemakaian Produksi', f: r => r.prod, num: true },
-                { t: 'Penyesuaian', f: r => r.adj, num: true }, { t: 'Saldo', f: r => '<b>' + num(r.saldo) + '</b>', num: true, raw: true },
-                { t: 'Per Tanggal', f: r => '<span style="white-space:nowrap">' + (r.last ? tgl(r.last) : tgl(today()) + ' <span class="muted">(cut off)</span>') + '</span>', raw: true }, { t: 'Min.', f: r => r.m.min || '-', num: true },
-                { t: 'Status', f: r => stChip(r.status), raw: true }
-              ], rows.map(r => Object.assign(r, { id: u + '|' + r.m.nama })), { click: true, empty: 'Tidak ada material.' }) + '</section>';
-          }).join('') || '<div class="empty">' + ic('stok') + '<p>Belum ada mutasi stok. Gunakan tombol <b>Barang Masuk</b> untuk mencatat stok awal.</p></div>';
+          return upd.html + stokSaldoBody(s, units, upd);
         }
-        let mv = [];
-        units.forEach(u => stockMoves(u).forEach(x => mv.push(Object.assign({ unit: u }, x))));
-        mv = mv.filter(x => inMonth(x.tgl, s.month) && qMatch(s.q, x.mat, x.ref, x.ket, x.jenis));
-        mv.sort((a, b) => String(b.tgl).localeCompare(String(a.tgl)));
-        const jl = { masuk: 'Masuk', keluar: 'Keluar', produksi: 'Produksi', penyesuaian: 'Opname' };
-        return '<section class="card">' + table([
-          { t: 'Tanggal', f: x => tgl(x.tgl) }, { t: 'Unit', f: x => unitChip(x.unit), raw: true }, { t: 'Material', f: x => x.mat, cls: 'strong' },
-          { t: 'Jenis', f: x => chip(jl[x.jenis] || x.jenis, x.jenis === 'masuk' ? 'ok' : x.jenis === 'produksi' ? 'info' : x.jenis === 'keluar' ? 'bad' : 'warn'), raw: true },
-          { t: 'Jumlah', f: x => '<b class="' + (x.qty >= 0 ? 't-ok' : 't-bad') + '">' + (x.qty >= 0 ? '+' : '') + num(x.qty) + '</b>', num: true, raw: true }, { t: 'Satuan', f: x => x.sat },
-          { t: 'Referensi', f: x => x.ref || '-' }, { t: 'Keterangan', f: x => x.ket || '-', cls: 'wrap' }, { t: 'Oleh', f: x => x.by || '-' }
-        ], mv, { click: true, empty: 'Tidak ada mutasi pada periode ini.' }) + '</section>';
+        return upd.html + stokMutasiBody(s, units);
       },
       bind: (el, s) => $$('[data-row]', el).forEach(tr => tr.onclick = () => {
         const id = tr.dataset.row;
@@ -52,9 +31,61 @@ MODS.stok = {
   summary() {
     let low = 0, n = 0;
     UNITS.forEach(u => stockSaldo(u).forEach(r => { if (r.masuk || r.prod || r.keluar || r.adj) n++; if (r.status === 'Menipis' || (r.status === 'Habis')) low++; }));
-    return { main: low ? low + ' material menipis/habis' : n ? 'Stok terkendali' : 'Catat stok awal', tone: low ? 'warn' : '', sub: n + ' material bermutasi' };
+    const upd = stokUpdInfo();
+    return { main: low ? low + ' material menipis/habis' : n ? 'Stok terkendali' : 'Catat stok awal', tone: low ? 'warn' : '', sub: n + ' material bermutasi' + (upd.at ? ' · diperbarui ' + tglJam(upd.at) : '') };
   }
 };
+/* Keterangan "terakhir diperbarui": dokumen stok/material terbaru (waktu simpan + oleh siapa) + penanda sinkron kartu stock sheet.
+   Kartu Stok Material sengaja TIDAK memakai kata sandi edit — semua akun bisa menambah/mengubah (server bc_put: kind stok & mat tidak dikunci). */
+const STOK_SYNC_ID = 'prmStokSync01';
+function stokUpdInfo() {
+  let last = null; const per = {};
+  const docs = all('stok').concat(all('mat'));
+  docs.forEach(d => {
+    if (!d._at) return;
+    if (!last || d._at > last._at) last = d;
+    const u = d.unit || 'Umum'; if (!per[u] || d._at > per[u]._at) per[u] = d;
+  });
+  const sy = get(STOK_SYNC_ID); const syAt = sy && (sy.at || sy._at);
+  const at = [last && last._at, syAt].filter(Boolean).sort().pop() || '';
+  const by = !at ? '' : last && last._at === at ? last._by : (sy && sy._by) || '';
+  const sampai = sy && sy.sampai ? Object.keys(sy.sampai).sort().map(u => u + ' ' + tgl(sy.sampai[u])).join(' · ') : '';
+  const html = '<div class="note stokupd">' + ic('refresh') + '<div><b>Terakhir diperbarui: ' + (at ? esc(tglHari(at)) + ' WIB' : 'belum ada data') + '</b>' + (by ? ' oleh ' + esc(by) : '') +
+    (syAt ? '<br><span>Sinkron kartu stock sheet terakhir ' + esc(tglJam(syAt)) + (sampai ? ' — data sheet sampai ' + esc(sampai) : '') + '.</span>' : '') +
+    (last && last._at !== at ? '<br><span>Perubahan stok terakhir di aplikasi ' + esc(tglJam(last._at)) + ' oleh ' + esc(last._by || '-') + '.</span>' : '') +
+    '<br><small>Semua akun bisa menambah &amp; mengubah stok material tanpa kata sandi edit.</small></div></div>';
+  return { at, by, per, html };
+}
+function tglHari(s) { const d = new Date(s); return ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'][d.getDay()] + ', ' + tglJam(s); }
+function stokSaldoBody(s, units, upd) {
+          return units.map(u => {
+            const rows = stockSaldo(u).filter(r => qMatch(s.q, r.m.nama, r.m.kat));
+            const tone = { Menipis: 0, Habis: 0 }; rows.forEach(r => tone[r.status] = (tone[r.status] || 0) + 1);
+            if (!s.unit && !rows.some(r => r.masuk || r.prod || r.keluar || r.adj)) return '';
+            const pu = upd.per[u];
+            return '<section class="card"><div class="chead"><div>' + unitChip(u) + '<h3>' + esc(UNIT_NAME[u]) + '</h3></div><div class="cmeta">' + rows.length + ' material · posisi per ' + tgl(stokPosisi(rows)) + (pu ? ' · diperbarui ' + tglJam(pu._at) + ' oleh ' + esc(pu._by || '-') : '') + (tone.Menipis ? ' · <b class="t-warn">' + tone.Menipis + ' menipis</b>' : '') + (tone.Habis ? ' · <b class="t-bad">' + tone.Habis + ' habis</b>' : '') + '</div></div>' +
+              table([
+                { t: 'Material', f: r => r.m.nama, cls: 'strong' }, { t: 'Kategori', f: r => r.m.kat }, { t: 'Satuan', f: r => r.m.sat },
+                { t: 'Masuk', f: r => r.masuk, num: true }, { t: 'Keluar', f: r => r.keluar, num: true }, { t: 'Pemakaian Produksi', f: r => r.prod, num: true },
+                { t: 'Penyesuaian', f: r => r.adj, num: true }, { t: 'Saldo', f: r => '<b>' + num(r.saldo) + '</b>', num: true, raw: true },
+                { t: 'Per Tanggal', f: r => '<span style="white-space:nowrap">' + (r.last ? tgl(r.last) : tgl(today()) + ' <span class="muted">(cut off)</span>') + '</span>', raw: true }, { t: 'Min.', f: r => r.m.min || '-', num: true },
+                { t: 'Status', f: r => stChip(r.status), raw: true }
+              ], rows.map(r => Object.assign(r, { id: u + '|' + r.m.nama })), { click: true, empty: 'Tidak ada material.' }) + '</section>';
+          }).join('') || '<div class="empty">' + ic('stok') + '<p>Belum ada mutasi stok. Gunakan tombol <b>Barang Masuk</b> untuk mencatat stok awal.</p></div>';
+}
+function stokMutasiBody(s, units) {
+        let mv = [];
+        units.forEach(u => stockMoves(u).forEach(x => mv.push(Object.assign({ unit: u }, x))));
+        mv = mv.filter(x => inMonth(x.tgl, s.month) && qMatch(s.q, x.mat, x.ref, x.ket, x.jenis));
+        mv.sort((a, b) => String(b.tgl).localeCompare(String(a.tgl)));
+        const jl = { masuk: 'Masuk', keluar: 'Keluar', produksi: 'Produksi', penyesuaian: 'Opname' };
+        return '<section class="card">' + table([
+          { t: 'Tanggal', f: x => tgl(x.tgl) }, { t: 'Unit', f: x => unitChip(x.unit), raw: true }, { t: 'Material', f: x => x.mat, cls: 'strong' },
+          { t: 'Jenis', f: x => chip(jl[x.jenis] || x.jenis, x.jenis === 'masuk' ? 'ok' : x.jenis === 'produksi' ? 'info' : x.jenis === 'keluar' ? 'bad' : 'warn'), raw: true },
+          { t: 'Jumlah', f: x => '<b class="' + (x.qty >= 0 ? 't-ok' : 't-bad') + '">' + (x.qty >= 0 ? '+' : '') + num(x.qty) + '</b>', num: true, raw: true }, { t: 'Satuan', f: x => x.sat },
+          { t: 'Referensi', f: x => x.ref || '-' }, { t: 'Keterangan', f: x => x.ket || '-', cls: 'wrap' }, { t: 'Oleh', f: x => x.by || '-' }
+        ], mv, { click: true, empty: 'Tidak ada mutasi pada periode ini.' }) + '</section>';
+}
 /* tanggal posisi stok: mutasi terakhir; tanpa tanggal → cut off hari ini */
 function stokPosisi(rows) { return rows.reduce((a, r) => r.last > a ? r.last : a, '') || today(); }
 function matOpts(v, unitKey = 'unit') { return matList(v[unitKey] || 'AMP').map(m => ({ v: m.nama, t: m.nama + ' (' + m.sat + ')' })); }
@@ -140,7 +171,7 @@ function matCard(u, nama) {
 }
 async function stokReport(s) {
   const units = s.unit ? [s.unit] : UNITS.concat('Umum');
-  const R = await pdfReport({ title: 'Laporan Stok Material', sub: (s.unit ? UNIT_NAME[s.unit] : 'Seluruh unit') + ' · Posisi ' + tgl(today(), true) + ' · Mutasi ' + monthLabel(s.month), fname: 'Laporan_Stok_' + (s.unit || 'Semua') });
+  const R = await pdfReport({ title: 'Laporan Stok Material', sub: (s.unit ? UNIT_NAME[s.unit] : 'Seluruh unit') + ' · Posisi ' + tgl(today(), true) + ' · Mutasi ' + monthLabel(s.month) + (stokUpdInfo().at ? ' · Terakhir diperbarui ' + tglJam(stokUpdInfo().at) : ''), fname: 'Laporan_Stok_' + (s.unit || 'Semua') });
   let tot = 0, low = 0;
   units.forEach(u => stockSaldo(u).forEach(r => { if (r.masuk || r.prod || r.keluar || r.adj) tot++; if (r.status === 'Menipis' || r.status === 'Habis') low++; }));
   R.kv([['Unit', s.unit || 'AMP, CMP, SCP, PCP'], ['Material bermutasi', String(tot)], ['Menipis / habis', String(low), low ? 'red' : ''], ['Periode mutasi', monthLabel(s.month)]]);

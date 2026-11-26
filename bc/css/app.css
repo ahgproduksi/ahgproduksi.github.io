@@ -674,3 +674,8 @@ details.devrab > .tbl { margin-top: 6px; }
 .jmbj { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: -4px 0 10px; font-size: 12.5px; color: var(--muted); }
 .jmbj b { color: var(--ink); font-weight: 600; }
 .jmprod .note { display: none; }
+
+/* Stok Material: keterangan terakhir diperbarui */
+.note.stokupd { display: flex; align-items: flex-start; gap: 10px; line-height: 1.55; }
+.note.stokupd > .ic { flex: none; width: 18px; height: 18px; margin-top: 2px; }
+.note.stokupd small { opacity: .8; }
