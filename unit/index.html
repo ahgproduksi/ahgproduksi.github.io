@@ -2287,7 +2287,7 @@ function nGo(it) {
   else if (it.kind === 'cash') { const C = S.cash; if (C.cat && C.cat !== d.cat) C.cat = ''; C.who = ''; C.q = ''; showPeriod(C, d.date); go('cash'); }
   else if (it.kind === 'cashcat') { S.cash.cat = it.id; go('cash'); }
   else if (it.kind === 'unit' && d.cat === 'proyeksi') { pjInit(); PJ.m = String(d.date || today()).slice(0, 7); PJ.w = 0; PJ.u = ''; if (PJ.bc && PJ.bc !== d.basecamp) PJ.bc = ''; go('proyeksi'); }
-  else if (it.kind === 'unit') { const U = S.unit; U.cat = d.cat || 'produksi'; U.bc = U.u = U.mk = U.q = ''; showPeriod(U, d.date); go('unit'); }
+  else if (it.kind === 'unit') unitOpen(d.basecamp, String(d.date || '').slice(0, 7)); // Unit = Kartu Operasional › Produksi
   else if (it.kind === 'link') { S.task.links = true; go('task'); }
   else if (it.kind === 'msg') {
     const c = convOf(it), all = live('msg').filter(m => convOf(m) === c).sort((a, b) => a.created - b.created || a.id.localeCompare(b.id));
@@ -3582,8 +3582,31 @@ async function bcAdd() {
   if (!basecamps().includes(n)) create('unitopt', { type: 'basecamp', name: n }, { quiet: 1 });
   setBc(n); render(); bcFrameSync();
 }
+// ---- Ruang kerja Unit (input produksi harian, kind 'unit' cat 'produksi') = tab "Input Produksi Unit" di Kartu Operasional › Produksi ----
+var bcWant = null; // tab yang harus dibuka iframe saat kartu Produksi tampil: { tab:'unit', month, id }
+function unitOpen(bc, month, id) {
+  if (bc !== undefined) { const b = bcNorm(bc || ''); if (BC_OK(b)) setBc(b); }
+  bcWant = { tab: 'unit', month: month || '', id: id || '' };
+  document.body.classList.remove('drawer'); if (dlg().open) closeAll();
+  S.bcr = 'prod';
+  if (S.view !== 'bc') go('bc'); else { renderNav(); bcFrameSync(); }
+  try { const w = $('#bcf')?.contentWindow; if (w && w.UNITX) w.UNITX.takeWant(); } catch {} // kartu Produksi sudah terbuka → langsung ke tab Unit
+}
+const unitRow = t => { const x = t.data, pu = prodUnits(); return { id: t.id, date: x.date || '', basecamp: bcNorm(x.basecamp || ''), unit: x.unit || '', nama: pu[x.unit]?.name || '', sat: x.sat || pu[x.unit]?.sat || '', volume: Number(x.volume) || 0, size: x.size || '', note: x.note || '', owner: uname(t.owner), created: t.created, ed: canEdit(t) }; };
+function unitExportFor(bc, month, u, q, fmt) { // export laporan Unit (PDF/Excel) dengan filter kartu Produksi
+  Object.assign(S.unit, { cat: 'produksi', p: month ? 'month' : 'all', ref: month ? month + '-01' : today(), from: '', to: '', bc: bc === '*' ? '' : bc || '', u: u || '', mk: '', q: q || '' });
+  unitExport('produksi', fmt);
+}
 // jembatan untuk iframe /bc/ (asal sama)
 window.AHG_BC = {
+  unitOn: () => !!S.me,
+  takeWant() { const w = bcWant; bcWant = null; return w; },
+  unitRows: bc => unitTx().filter(t => (t.data.cat || 'produksi') === 'produksi' && (!bc || bc === '*' || t.data.basecamp === bc)).map(unitRow),
+  unitUnits: () => prodUnits(),
+  unitVer() { let n = 0, s = 0, m = 0; for (const t of S.items.values()) if (t.kind === 'unit' || t.kind === 'unitopt') { n++; s += (t.lv || 0) + (t.deleted ? 7 : 0); const u = +t.updated || 0; if (u > m) m = u; } return n + '|' + s + '|' + m + '|' + S.users.length; },
+  unitNew(bc) { S.unit.bc = bc && bc !== '*' ? bc : ''; S.unit.u = ''; unitDialog(null); },
+  unitEdit(id) { const t = S.items.get(id); if (!t || t.deleted) return toast('Input produksi ini sudah dihapus.', 'warn'); if (!canEdit(t)) return toast('Hanya pencatat atau admin yang bisa mengubah input ini.', 'warn'); unitDialog(t); },
+  unitExport: (bc, month, u, q, fmt) => unitExportFor(bc, month, u, q, fmt),
   list: () => basecamps().filter(BC_OK),
   display: () => uname(S.me?.name),
   authLost: () => authLost(),
@@ -3601,7 +3624,7 @@ const KCH = {
 };
 
 // Virtual Work AHG — reminder, global chat (+ whisper), task (+ rutin mingguan) dan kasbon tim. Data di Supabase (proyek ahg-produksi), sinkron real time.
-const BUILD = '20261126-114755';
+const BUILD = '20261126-120232';
 const SB_URL = 'https://herltzublcqpbgyxbbyp.supabase.co', SB_KEY = 'sb_publishable_FMSC0iqDRLsRXtvTtZX0Ow_piPi5bli'; // public key; tables closed, only ahg_* functions
 // File → Google Drive yulius.krisnawan (folder "AHG Produksi", 5 GiB) lewat Edge Function ahg-file: cek login, buka sesi upload Drive
 // (browser kirim byte langsung ke Google), unduh diproksikan per 8 MiB. Cadangan saat Drive terputus: Supabase Storage (bucket ahg-files).
@@ -3657,7 +3680,7 @@ const NOTE_COLORS = { '': ['Tanpa warna', 'transparent'], red: ['Merah', '#f28b8
 const ACCENTS = { '#1f5fae': 'Biru Basecamp (bawaan)', '#1f6fc0': 'Biru AHG (logo)', '#d62b2b': 'Merah AHG (logo)', '#1a8566': 'Hijau', '#2563eb': 'Biru', '#7c3aed': 'Ungu', '#db2777': 'Pink', '#e07b00': 'Oranye', '#dc2626': 'Merah', '#0d9488': 'Toska', '#475569': 'Abu' };
 const AV_COLORS = ['#1a8566', '#2563eb', '#7c3aed', '#db2777', '#e07b00', '#dc2626', '#0d9488', '#475569', '#9333ea', '#0891b2'];
 const STATUS = { todo: ['Belum', '○'], doing: ['Proses', '◐'], done: ['Selesai', '●'] };
-const VIEWS = { home: ['📊', 'Dashboard'], reminder: ['⏰', 'Reminder'], chat: ['💬', 'Global Chat'], task: ['✅', 'Task'], cash: ['💰', 'Cash'], unit: ['🏭', 'Unit'], proyeksi: ['📅', 'Proyeksi Produksi'], wait: ['🎮', 'Waiting'], tools: ['🧰', 'Tools'], users: ['👥', 'Users'], admin: ['👑', 'Admin'], bc: ['🏗', 'Kartu Operasional'] };
+const VIEWS = { reminder: ['⏰', 'Reminder'], chat: ['💬', 'Global Chat'], task: ['✅', 'Task'], cash: ['💰', 'Cash'], unit: ['🏭', 'Unit'], proyeksi: ['📅', 'Proyeksi Produksi'], wait: ['🎮', 'Waiting'], tools: ['🧰', 'Tools'], users: ['👥', 'Users'], admin: ['👑', 'Admin'], bc: ['🏗', 'Kartu Operasional'] };
 
 // ---------- state ----------
 const now0 = new Date();
@@ -4007,7 +4030,7 @@ async function login(name, pass, remember, reg) {
   start(msg);
 }
 function start(msg) {
-  loadCache(); S.loaded = false; S.view = 'home'; S.chat.conv = 'g'; S.dlg = null;
+  loadCache(); S.loaded = false; S.view = 'reminder'; // setelah login langsung ke Reminder (Dashboard dihapus) S.chat.conv = 'g'; S.dlg = null;
   const bl = SS.get('bclink'); // tautan ?bc=<basecamp>#/<kartu> (mis. dari ahgbawen.github.io lama) → langsung ke Kartu Operasional
   if (bl) { SS.del('bclink'); try { const o = JSON.parse(bl); if (BC_OK(o.bc)) { setBc(o.bc); S.bcr = KARTU.some(k => k[0] === o.r) ? o.r : ''; S.view = 'bc'; } } catch {} }
   const t = prefData().theme; if (t && !LS.get('theme')) { LS.set('theme', JSON.stringify(t)); applyTheme(); }
@@ -4098,19 +4121,19 @@ function badges() {
 }
 function renderNav() {
   const b = badges(), on = S.users.filter(online).length;
-  const items = ['home', 'reminder', 'task', 'cash', 'unit', 'proyeksi', 'wait', 'users', ...(isAdmin() ? ['admin'] : [])];
+  const items = ['reminder', 'task', 'cash', 'proyeksi', 'wait', 'users', ...(isAdmin() ? ['admin'] : [])];
   const n = { reminder: b.rem, chat: b.chat, task: b.task, wait: waitBadge(), users: on };
   const nav = (v) => `<button type="button" class="nav ${S.view === v ? 'on' : ''} nv-${v}" data-a="go" data-v="${v}">${ico(VICON[v])}<span class="lb">${VIEWS[v][1]}</span>${n[v] ? `<span class="n ${v === 'chat' ? 'hot' : v === 'users' ? 'grn' : ''}">${n[v]}</span>` : ''}</button>`;
   const cmp = `<a hidden class="nav nv-cmp" href="/pengiriman/" title="Keberangkatan pengiriman produksi — CMP · AMP · SCP · PCP">${ico('jadwal')}<span class="lb">Keberangkatan Pengiriman</span></a>`;
   const kart = `<button type="button" class="nav ${S.view === 'bc' && !S.bcr ? 'on' : ''}" data-a="bcGo" data-r="">${ico('home')}<span class="lb">${S.bc ? 'Ringkasan Basecamp' : 'Rekap Semua Basecamp'}</span></button>`
     + KARTU.map(([k, t, i], x) => `<button type="button" class="nav ${S.view === 'bc' && S.bcr === k ? 'on' : ''}" data-a="bcGo" data-r="${k}">${ico(i)}<span class="lb">${esc(t)}</span><em>${String(x + 1).padStart(2, '0')}</em></button>`).join('');
   const side = $('#side'), sn = $('.snav', side), st = sn ? sn.scrollTop : 0;
-  setHTML(side, `<a class="slogo" href="#" data-a="go" data-v="home"><span class="ahg-logo sl" role="img" aria-label="PT. Armada Hada Graha"></span><div><b>Virtual Work AHG</b><span>PT. Armada Hada Graha</span></div></a>${bcSelect()}
+  setHTML(side, `<a class="slogo" href="#" data-a="go" data-v="reminder"><span class="ahg-logo sl" role="img" aria-label="PT. Armada Hada Graha"></span><div><b>Virtual Work AHG</b><span>PT. Armada Hada Graha</span></div></a>${bcSelect()}
     <nav class="snav"><div class="sgrp">Ruang Kerja</div>${items.map(v => nav(v)).join('')}<div class="sgrp">Kartu Operasional</div>${kart}</nav>
     <a class="shelp" target="_blank" rel="noopener" href="${esc(WA_HELP)}">${ico('wa')}<div><b>Bantuan Admin</b><span>+62 822-9977-4825</span></div></a>
     <div class="side-f"><span class="sync"></span><span class="small">versi ${BUILD}</span></div>`);
   const sn2 = $('.snav', side); if (sn2 && sn2 !== sn) sn2.scrollTop = st;
-  setHTML($('#bnav'), ['home', 'reminder', 'task', 'cash', 'unit', 'bc', 'users'].map(v => `<button type="button" class="${S.view === v || (v === 'unit' && S.view === 'proyeksi') ? 'on' : ''}" data-a="go" data-v="${v}"><span class="ic">${ico(VICON[v])}${n[v] && v !== 'users' ? `<i class="dot ${v === 'chat' ? 'hot' : ''}">${n[v] > 99 ? '99+' : n[v]}</i>` : ''}</span><span>${v === 'chat' ? 'Chat' : v === 'home' ? 'Home' : v === 'bc' ? 'Kartu' : VIEWS[v][1]}</span></button>`).join(''));
+  setHTML($('#bnav'), ['reminder', 'task', 'cash', 'proyeksi', 'bc', 'tools', 'users'].map(v => `<button type="button" class="${S.view === v ? 'on' : ''}" data-a="go" data-v="${v}"><span class="ic">${ico(VICON[v])}${n[v] && v !== 'users' ? `<i class="dot ${v === 'chat' ? 'hot' : ''}">${n[v] > 99 ? '99+' : n[v]}</i>` : ''}</span><span>${v === 'chat' ? 'Chat' : v === 'proyeksi' ? 'Proyeksi' : v === 'bc' ? 'Kartu' : VIEWS[v][1]}</span></button>`).join(''));
   setHTML($('#me-btn'), `${av(S.me.name)}<span class="mn"><b>${esc(uname(S.me.name))}</b><small>${esc(ustatus(S.me.name) || (isAdmin() ? 'Administrator' : 'Pengguna'))}</small></span>${ico('down', 'caret')}`);
   renderBell();
   $('#tools-btn')?.classList.toggle('on', S.view === 'tools');
@@ -4122,6 +4145,8 @@ function renderNav() {
 function go(v) {
   document.body.classList.remove('drawer');
   if (v === 'admin' && !isAdmin()) v = 'reminder';
+  if (v === 'home') v = 'reminder'; // Dashboard dihapus
+  if (v === 'unit') return unitOpen(); // ruang kerja Unit kini di Kartu Operasional › Produksi
   if (S.view === 'wait' && v !== 'wait' && W.saveT) gameFlush();
   if (v === 'chat' && S.view !== 'chat') S.chatBack = S.view;
   const moved = S.view !== v;
@@ -4147,7 +4172,7 @@ function renderMain() {
     bcShow(); return;
   }
   bcHide();
-  const html = ({ home: vHome, reminder: vReminder, chat: vChat, task: vTask, cash: vCash, unit: vUnit, proyeksi: vProyeksi, wait: vWait, tools: vTools, users: vUsersPage, admin: vAdmin, bc: vKartu }[S.view] || vReminder)();
+  const html = ({ reminder: vReminder, chat: vChat, task: vTask, cash: vCash, unit: vUnit, proyeksi: vProyeksi, wait: vWait, tools: vTools, users: vUsersPage, admin: vAdmin, bc: vKartu }[S.view] || vReminder)();
   const sameChat = S.view === 'chat' && m.dataset.view === 'chat' && m.dataset.conv === S.chat.conv && $('#composer', m);
   if (sameChat) { // keep the composer (typing, IME, file picker) — refresh only lists and header
     const tmp = document.createElement('div'); tmp.innerHTML = html;
@@ -4228,7 +4253,7 @@ function vReminder() {
   const owners = [...new Set(rems.map(r => r.owner))];
   const addDate = R.addDate || R.sel || td;
   const mode = R.mode, cal = mode === 'cal';
-  return `<div class="head"><h1>⏰ Reminder <span class="hc">${counts.open} aktif</span></h1><div class="tools">${remSeg()}<button type="button" class="btn sm" data-a="remExpDlg" title="Unduh daftar reminder PDF / Excel">📤 Export</button>${cal ? '<button type="button" class="btn sm" data-a="remToday">Hari ini</button>' : ''}</div></div>
+  return `<div class="head"><h1>⏰ Reminder <span class="hc">${counts.open} aktif</span></h1><div class="tools">${remSeg()}<button type="button" class="btn sm" data-a="remExpDlg" title="Unduh daftar reminder PDF / Excel">📤 Export</button><button type="button" class="btn sm" data-a="lpDlg" title="Laporan resmi PDF mingguan / bulanan / tahunan">📑 Laporan</button>${cal ? '<button type="button" class="btn sm" data-a="remToday">Hari ini</button>' : ''}</div></div>
   ${cal ? `<button type="button" class="hb-tog" data-a="calTog" title="${R.cal ? 'Sembunyikan kalender' : 'Tampilkan kalender'}"><span>${R.cal ? '⌃' : '⌄'}</span></button>
   ${R.cal ? `<section class="card cal">
     <div class="cal-h" id="cal-h">
@@ -5286,8 +5311,8 @@ const A = {
     catch (e) { toast('Gagal menghapus: ' + esc(e.message), 'warn'); loadFiles(); }
   },
   openFile: el => viewFile(el.dataset.id, el.dataset.name, el.dataset.mime),
-  toolsBtn: () => go(S.view === 'tools' ? 'home' : 'tools'),
-  chatFab: () => go(S.view === 'chat' ? S.chatBack || 'home' : 'chat'),
+  toolsBtn: () => go(S.view === 'tools' ? 'reminder' : 'tools'),
+  chatFab: () => go(S.view === 'chat' ? S.chatBack || 'reminder' : 'chat'),
   whisper: el => { closeAll(); S.chat.conv = 'w:' + el.dataset.u; go('chat'); setTimeout(() => $('#c-text')?.focus(), 50); },
   // reminder
   remMon: el => { const d = new Date(S.rem.y, S.rem.m + Number(el.dataset.n), 1); S.rem.y = d.getFullYear(); S.rem.m = d.getMonth(); S.rem.sel = ''; S.rem.addDate = ''; renderMain(); },

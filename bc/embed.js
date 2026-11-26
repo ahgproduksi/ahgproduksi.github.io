@@ -111,7 +111,7 @@
         const s = sumOf(bc, r) || {};
         return '<a class="mcard" href="#" data-pick="' + esc(bc) + '" style="--d:' + (i * 35) + 'ms;--bct:' + bcTone(bc) + '"><div class="mtop"><span class="mic">' + ic('home') + '</span><em>' + String(i + 1).padStart(2, '0') + '</em></div><h3>Basecamp ' + esc(bc) + '</h3><p>' + esc(mod.title) + '</p>' +
           '<div class="mstat ' + (s.tone || '') + '"><b>' + esc(R0.data[bc] ? s.main || '' : 'Memuat…') + '</b><span>' + esc(s.sub || '') + '</span></div><span class="mgo">Buka kartu' + ic('right') + '</span></a>';
-      }).join('') + '</div>' + (r === 'bppb' ? bppbAll() : '');
+      }).join('') + '</div>' + (r === 'bppb' ? bppbAll() : '') + (r === 'prod' && typeof UNITX !== 'undefined' && UNITX.on() ? UNITX.allHtml() : '');
       put(main, html); return;
     }
     const st = bcs.map(bc => [bc, statsOf(bc)]);
@@ -172,6 +172,7 @@
     $('#app').innerHTML = '<div class="mainw"><main id="main"></main></div>';
     const go = () => { APP.route = (location.hash.replace(/^#\/?/, '') || '').split('?')[0]; if (!MODS[APP.route]) APP.route = ''; CFG.onRoute(APP.route, MODS[APP.route] ? MODS[APP.route].title : 'Rekap Semua Basecamp'); draw(); window.scrollTo(0, 0); };
     window.onhashchange = go;
+    window.addEventListener('unitx', () => { if (APP.route === 'prod') draw(); }); // input produksi unit berubah di Virtual Work
     go(); loadAll();
     setInterval(() => { if (!document.hidden && !R0.busy) loadAll(true); }, 60000);
   };

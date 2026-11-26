@@ -163,18 +163,22 @@ async function stokReport(s) {
 }
 
 /* =================== 2. PRODUKSI (SO / WO + BOM) =================== */
+const UXON = () => typeof UNITX !== 'undefined' && UNITX.on();
 MODS.prod = {
   title: 'Produksi', icon: 'prod', desc: 'Sales Order / Work Order per proyek, BOM jobmix memotong stok otomatis',
   render(root) {
-    const st = stateOf('prod', { tab: 'so', unit: '', q: '', month: curMonth() });
+    const ux = UXON(); // tab "Input Produksi Unit" = ruang kerja Unit Virtual Work AHG (hanya di ahgproduksi.github.io/bc/, bc-src/unitx.js)
+    const st = stateOf('prod', { tab: ux ? 'unit' : 'so', unit: '', q: '', month: curMonth() });
+    if (ux) UNITX.applyWant(st); else if (st.tab === 'unit') st.tab = 'so';
     return page(root, {
-      key: 'prod', st, report: prodReport,
-      tabs: [{ k: 'so', t: 'Sales Order / Work Order' }, { k: 'bom', t: 'Rekap BOM & Pemakaian' }, { k: 'jmf', t: 'Komposisi Jobmix' }],
-      actions: [{ id: 'so', t: 'SO / WO Baru', pri: true }, { id: 'real', t: 'Catat Produksi', icon: 'prod' }],
-      on: { so: () => soForm(), real: () => realForm() },
+      key: 'prod', st, report: s => s.tab === 'unit' && UXON() ? UNITX.exp(s, 'pdf') : prodReport(s),
+      tabs: (ux ? [{ k: 'unit', t: 'Input Produksi Unit' }] : []).concat([{ k: 'so', t: 'Sales Order / Work Order' }, { k: 'bom', t: 'Rekap BOM & Pemakaian' }, { k: 'jmf', t: 'Komposisi Jobmix' }]),
+      actions: (ux ? [{ id: 'uin', t: 'Input Produksi Unit', pri: true, icon: 'prod' }] : []).concat([{ id: 'so', t: 'SO / WO Baru', pri: !ux }, { id: 'real', t: 'Catat Produksi', icon: 'prod' }]),
+      on: { uin: () => UNITX.add(), so: () => soForm(), real: () => realForm() },
       filter: s => s.tab === 'jmf' ? periodBar(Object.assign({}, s, { month: undefined })) : periodBar(s),
-      body: s => s.tab === 'so' ? soListHtml(s) : s.tab === 'bom' ? bomHtml(s) : editBadge('Komposisi Jobmix') + jmfHtml(s),
+      body: s => s.tab === 'unit' && UXON() ? UNITX.html(s) : s.tab === 'so' || s.tab === 'unit' ? soListHtml(s) : s.tab === 'bom' ? bomHtml(s) : editBadge('Komposisi Jobmix') + jmfHtml(s),
       bind: (el, s) => {
+        if (s.tab === 'unit' && UXON()) return UNITX.bind(el, s);
         $$('[data-row]', el).forEach(tr => tr.onclick = () => s.tab === 'jmf' ? jmfForm(tr.dataset.row.split('|')[0], tr.dataset.row.split('|')[1]) : soDetail(tr.dataset.row));
         const ap = $('[data-addprod]', el); if (ap) ap.onclick = () => jmfForm(s.unit || 'AMP', null);
         bindRelock(el);
