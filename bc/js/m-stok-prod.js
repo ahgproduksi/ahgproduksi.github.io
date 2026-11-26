@@ -175,7 +175,7 @@ MODS.prod = {
       tabs: (ux ? [{ k: 'unit', t: 'Input Produksi Unit' }] : []).concat([{ k: 'so', t: 'Sales Order / Work Order' }, { k: 'bom', t: 'Rekap BOM & Pemakaian' }, { k: 'jmf', t: 'Komposisi Jobmix' }]),
       actions: (ux ? [{ id: 'uin', t: 'Input Produksi Unit', pri: true, icon: 'prod' }] : []).concat([{ id: 'so', t: 'SO / WO Baru', pri: !ux }, { id: 'real', t: 'Catat Produksi', icon: 'prod' }]),
       on: { uin: () => UNITX.add(), so: () => soForm(), real: () => realForm() },
-      filter: s => s.tab === 'jmf' ? periodBar(Object.assign({}, s, { month: undefined })) : periodBar(s),
+      filter: s => s.tab === 'jmf' ? periodBar(Object.assign({}, s, { month: undefined }, typeof jobmixHtml === 'function' ? { units: false } : {})) : periodBar(s),
       body: s => s.tab === 'unit' && UXON() ? UNITX.html(s) : s.tab === 'so' || s.tab === 'unit' ? soListHtml(s) : s.tab === 'bom' ? bomHtml(s) : editBadge('Komposisi Jobmix') + (typeof jobmixHtml === 'function' ? jobmixHtml(s) : jmfHtml(s)),
       bind: (el, s, fill) => {
         if (s.tab === 'unit' && UXON()) return UNITX.bind(el, s);
@@ -334,7 +334,7 @@ function jmfHtml(s) {
   const u = s.unit || 'AMP';
   const rows = products(u).filter(p => qMatch(s.q, p.n)).map(p => { const c = hppCalc(u, p.n); return Object.assign({ id: u + '|' + p.n, c }, p); });
   return '<div class="note">' + (s.unit ? '' : 'Menampilkan unit AMP — pilih unit pada filter untuk unit lain. ') + 'Komposisi acuan dari sheet RAPU-BUASO (Job Mix Formula & rincian BUASO). Ubah koefisien atau tambah produk; HPP, Price List, dan SO baru langsung memakai komposisi, harga bahan, dan biaya harian terbaru.</div>' +
-    '<section class="card"><div class="chead"><div>' + unitChip(u) + '<h3>' + esc(UNIT_NAME[u]) + ' — ' + rows.length + ' produk</h3></div><button class="btn ghost sm" data-addprod>' + ic('plus') + 'Tambah produk</button></div>' +
+    '<section class="card"><div class="chead"><div>' + unitChip(u) + '<h3>' + (typeof jobmixHtml === 'function' ? 'Produk & BUASO ' : '') + esc(UNIT_NAME[u]) + ' — ' + rows.length + ' produk</h3></div><button class="btn ghost sm" data-addprod>' + ic('plus') + 'Tambah produk</button></div>' +
     table([{ t: 'Produk', f: p => '<b>' + esc(p.n) + '</b>' + (p.edited ? ' ' + chip(p.def ? 'Diubah' : 'Baru', 'info') : ''), raw: true }, { t: 'Satuan', f: p => p.s },
     { t: 'Bahan', f: p => rp(p.c.buaso.B), num: true }, { t: 'U + A + S + O', f: p => rp(p.c.buaso.U + p.c.buaso.A + p.c.buaso.S + p.c.buaso.O), num: true }, { t: 'HPP + Bunga', f: p => '<b>' + rp(p.c.hpp) + '</b>', num: true, raw: true },
     { t: 'Loco BC', f: p => rp(p.c.harga.bc), num: true }, { t: 'Internal', f: p => rp(p.c.harga.int), num: true }, { t: 'Eksternal', f: p => rp(p.c.harga.ext), num: true }], rows, { click: true }) + '</section>';

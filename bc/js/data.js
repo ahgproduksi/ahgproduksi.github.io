@@ -85,10 +85,10 @@ function products(u) {
   const base = (K.unit[u] || []).map(p => ({ n: p.n, s: p.s, h: p.h.slice(), b: p.b.map(x => x.slice()), def: true }));
   all('jmf').filter(d => d.unit === u).forEach(d => {
     const i = base.findIndex(p => p.n.toLowerCase() === String(d.n).toLowerCase());
-    const p = { n: d.n, s: d.s, h: d.h || [0, 0, 0], b: d.b || [], doc: d.id, hide: d.hide, def: i >= 0 && base[i].def, edited: true };
+    const p = { n: d.n, s: d.s, h: d.h || [0, 0, 0], b: (d.b || []).map(x => x.slice()), doc: d.id, hide: d.hide, def: i >= 0 && base[i].def, edited: true, at: d._at };
     if (i >= 0) base[i] = p; else base.push(p);
   });
-  if (typeof jobmixApply === 'function') base.forEach(p => { if (!p.edited) jobmixApply(u, p); }); // Jobmix CMP / SCP per basecamp (js/jobmix.js)
+  if (typeof jobmixApply === 'function') base.forEach(p => jobmixApply(u, p)); // Jobmix AMP / CMP / SCP / PCP per basecamp (js/jobmix.js)
   return base.filter(p => !p.hide);
 }
 const productFind = (u, n) => products(u).find(p => p.n === n) || null;

@@ -666,3 +666,11 @@ details.devrab > .tbl { margin-top: 6px; }
 .okt { color: var(--green); } .badt { color: var(--red); }
 .jmfr td small, .tbl td small.muted { font-size: 11px; font-weight: 500; }
 .note.jmn { margin: 12px 0 0; }
+.jmvol { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface2); font-size: 13px; }
+.jmvol .jml { font-weight: 700; }
+.jmvol .jmvin { width: 130px; }
+.jmvol .jmvin input { width: 100%; height: 34px; padding: 0 44px 0 10px; border: 1px solid var(--line2); border-radius: 9px; background: #fff; font-size: 14px; font-weight: 600; text-align: right; }
+.jmvol .jmvin input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 4px rgba(31, 95, 174, .12); }
+.jmbj { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: -4px 0 10px; font-size: 12.5px; color: var(--muted); }
+.jmbj b { color: var(--ink); font-weight: 600; }
+.jmprod .note { display: none; }
