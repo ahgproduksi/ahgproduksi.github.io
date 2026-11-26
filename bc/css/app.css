@@ -620,3 +620,10 @@ table.sheetlike td.wrap { min-width: 160px; }
 .pfstack i { display: block; height: 100%; border-right: 2px solid #fff; } .pfstack i:last-child { border-right: 0; }
 .pffc .kpis { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
 .buaso .tot small { color: rgba(255, 255, 255, .78); }
+/* Performance › RKA */
+.rkat table { font-size: 12.5px; } .rkat td, .rkat th { white-space: nowrap; }
+.rkat .rkst { position: sticky; left: 0; z-index: 1; background: var(--surface, #fff); min-width: 220px; max-width: 300px; white-space: normal; }
+.rkat thead .rkst { background: inherit; } .rkat tr.sub .rkst { background: #fafbfd; } .rkat tr.grand .rkst { background: var(--navy); }
+.rkat th.rkytd { color: var(--navy); }
+.rkat td small { display: block; font-size: 11px; color: var(--muted); }
+.items input[data-ik="m0"], .items input[data-ik="m1"], .items input[data-ik="m2"], .items input[data-ik="m3"], .items input[data-ik="m4"], .items input[data-ik="m5"], .items input[data-ik="m6"], .items input[data-ik="m7"], .items input[data-ik="m8"], .items input[data-ik="m9"], .items input[data-ik="m10"], .items input[data-ik="m11"] { min-width: 112px; }

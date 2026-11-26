@@ -144,7 +144,7 @@ function pfBuild(bc) { // hitung satu basecamp dari S.docs
   });
   const cfg = pfFcCfg(doc), fc = {};
   units.forEach(x => { try { fc[x.u] = pfFc(x.u, x.tg, doc.unit && doc.unit[x.u], cfg); } catch (e) { console.warn('forecast', x.u, e); const z = { vol: 0, omzet: 0, biaya: 0, lk: 0, bunga: 0, laba: 0, mats: [], B: 0, U: 0, A: 0, S: 0, O: 0 }; fc[x.u] = { u: x.u, hr: 0, hpp: 0, mx: { it: [], bz: {}, mats: [] }, per: { d: z, w: z, m: z, y: z }, masa: 0, modal: 0, err: 1 }; } });
-  return { bc, units, miss, src, cfg, fc, by: Object.fromEntries(units.map(x => [x.u, x])) };
+  return { bc, units, miss, src, cfg, fc, rka: rkaSummary(get(RKA_ID)), by: Object.fromEntries(units.map(x => [x.u, x])) };
 }
 const pfHere = () => memo('perf', () => pfBuild(BC.replace(/^Basecamp /, '')));
 const pfVal = (x, mode, key) => ({ real: x.map[mode][key] || 0, tg: x.tg[mode] });
@@ -336,6 +336,110 @@ function pfMixHtml(D, f) {
       f.mx.it.slice().sort((a, b) => b.p - a.p).map(i => Object.assign({ id: i.n }, i))) + '<div class="cfoot">' + (f.mx.has ? 'Porsi produk diatur manual.' : 'Porsi sama rata untuk semua produk price list ' + f.u + '.') + '</div></section>';
 }
 
+/* ---------- RKA (Rencana Kerja & Anggaran) Unit Produksi: dokumen prmRKA2027 per basecamp, isi dari sheet
+   "Budget Bulanan Per Divisi 2027 - RKA" tab Unit (2) (per basecamp + investasi) dan tab Unit (COGS per jenis unit). Detail pos hanya di database. ---------- */
+const RKA_ID = 'prmRKA2027';
+const RKA_K = ['Opex', 'Perijinan', 'Maintenance', 'Pengembangan', 'COGS', 'Others Expense'];
+const RKA_C = { Opex: '#1f5fae', Perijinan: '#b8641a', Maintenance: '#0f8a6a', Pengembangan: '#7a4fc2', COGS: '#2f7d8c', 'Others Expense': '#66758a' };
+const BLN_F = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+const rkaDoc = () => get(RKA_ID);
+const rkaCut = d => Math.max(1, Math.min(12, +(d && d.cut) || 1));
+const rkaM = i => Array.from({ length: 12 }, (_, k) => +(i.m && i.m[k]) || 0);
+const rkaTot = items => Array.from({ length: 12 }, (_, k) => sum(items, i => rkaM(i)[k]));
+const rkaS = a => a.reduce((x, y) => x + (+y || 0), 0);
+const R0 = v => Math.abs(v) < 0.5 ? '-' : nf0.format(Math.round(v));
+function rkaRow(i, cut) { const m = rkaM(i), t = rkaS(m), y = rkaS(m.slice(0, cut)), r = +i.real || 0; return { m, t, y, r, v: y - r, p: y ? r / y : null }; }
+function rkaAgg(items, cut) { const m = rkaTot(items), y = rkaS(m.slice(0, cut)), r = sum(items, i => +i.real || 0); return { m, t: rkaS(m), y, r, v: y - r, p: y ? r / y : null, n: items.length }; }
+function rkaSummary(d) { // dipakai rekap Semua Basecamp
+  if (!d) return null; const cut = rkaCut(d), it = (d.sec || []).flatMap(s => s.items || []), a = rkaAgg(it, cut), k = {};
+  RKA_K.forEach(q => { k[q] = sum(it.filter(i => i.k === q), i => rkaS(rkaM(i))); }); return Object.assign(a, { cut, k });
+}
+function rkaTable(items, cut, foot) {
+  const th = '<tr><th class="rkst">Pos anggaran</th><th>Kategori</th>' + BLN.map((b, k) => '<th class="n' + (k < cut ? ' rkytd' : '') + '">' + b + '</th>').join('') + '<th class="n">Total 1 tahun</th><th class="n">YTD budget</th><th class="n">Realisasi YTD</th><th class="n">Variance YTD</th><th class="n">Serapan</th></tr>';
+  const tr = (cls, a, b, r) => '<tr' + (cls ? ' class="' + cls + '"' : '') + '><td class="rkst">' + a + '</td><td>' + b + '</td>' + r.m.map((v, k) => '<td class="n' + (k < cut ? ' rkytd' : '') + '">' + R0(v) + '</td>').join('') + '<td class="n"><b>' + R0(r.t) + '</b></td><td class="n">' + R0(r.y) + '</td><td class="n">' + R0(r.r) + '</td><td class="n' + (r.v < -0.5 ? ' t-bad' : '') + '">' + R0(r.v) + '</td><td class="n">' + pfP(r.p) + '</td></tr>';
+  if (!items.length) return '<div class="empty"><p>Belum ada pos anggaran.</p></div>';
+  const ks = RKA_K.filter(k => items.some(i => i.k === k)).concat([...new Set(items.map(i => i.k))].filter(k => !RKA_K.includes(k)));
+  return '<div class="tbl rkat"><table><thead>' + th + '</thead><tbody>' + items.map(i => tr('', esc(i.n), '<i class="pfdot" style="background:' + (RKA_C[i.k] || '#99a') + '"></i>' + esc(i.k || '-'), rkaRow(i, cut))).join('') +
+    (ks.length > 1 && items.length > ks.length ? ks.map(k => tr('sub', 'Subtotal ' + esc(k), '', rkaAgg(items.filter(i => i.k === k), cut))).join('') : '') + tr('grand', esc(foot || 'Total'), '', rkaAgg(items, cut)) + '</tbody></table></div>';
+}
+/* grafik batang bertumpuk per bulan menurut kategori */
+function rkaChart(items, cut) {
+  const ks = RKA_K.filter(k => items.some(i => i.k === k)), per = ks.map(k => rkaTot(items.filter(i => i.k === k))), tot = rkaTot(items), mx = pfNice(Math.max(...tot, 1));
+  const W = 1100, H = 250, L = 58, R = 10, T = 14, B = 26, bw = (W - L - R) / 12, w = Math.min(34, bw * 0.62), Y = v => T + (H - T - B) * (1 - v / mx);
+  let o = pfAxis(W, H, L, R, T, B, mx, v => pfN(v));
+  for (let k = 0; k < 12; k++) {
+    let base = 0; const x = L + bw * (k + 0.5) - w / 2;
+    ks.forEach((q, j) => { const v = per[j][k]; if (v > 0) { o += '<rect x="' + x.toFixed(1) + '" y="' + Y(base + v).toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + (Y(base) - Y(base + v)).toFixed(1) + '" fill="' + RKA_C[q] + '"' + (k < cut ? '' : ' opacity=".72"') + '/>'; base += v; } });
+    o += '<text x="' + (L + bw * (k + 0.5)) + '" y="' + (H - 8) + '" text-anchor="middle" class="pfa">' + BLN[k] + '</text>';
+    o += '<rect x="' + (L + bw * k) + '" y="' + T + '" width="' + bw + '" height="' + (H - T - B) + '" fill="transparent" tabindex="0" data-tip="' + esc('<b>' + BLN_F[k] + '</b>' + ks.map((q, j) => per[j][k] ? '<br>' + q + ' ' + rp(per[j][k]) : '').join('') + '<br><b>Total ' + rp(tot[k]) + '</b>') + '"/>';
+  }
+  return '<div class="pfch"><svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="RKA per bulan">' + o + '</svg></div><div class="pfkey">' + ks.map(q => '<span><i class="pfdot" style="background:' + RKA_C[q] + '"></i>' + q + '</span>').join('') + '<span>Bulan s.d. cut-off ditampilkan penuh</span></div>';
+}
+function rkaHtml(D, s) {
+  const d = rkaDoc(), view = s.rv === 'cogs' ? 'cogs' : 'bc';
+  if (!d) return '<div class="empty"><p>Belum ada RKA untuk ' + esc(BC) + '.</p><button class="btn pri sm" data-rkanew>' + ic('plus') + 'Buat RKA</button></div>';
+  const cut = rkaCut(d), secs = view === 'cogs' ? (d.cogs || []).map(c => ({ t: 'COGS ' + c.u + ' · ' + UNIT_NAME[c.u], items: c.items || [], u: c.u })) : d.sec || [], all = secs.flatMap(x => x.items), A = rkaAgg(all, cut);
+  const F = view === 'bc' ? pfFcAct(D) : null;
+  return '<div class="note">RKA ' + esc(d.tahun || 2027) + ' Unit Produksi' + (view === 'cogs' ? ' · COGS per jenis unit untuk <b>seluruh perusahaan</b> (tab Unit di file RKA), bukan khusus ' + esc(BC) : ' · ' + esc(BC)) + '. Sumber: ' + esc(d.sumber || '-') + '. Cut-off YTD: <b>' + BLN_F[cut - 1] + '</b> <button class="btn ghost sm" data-rkacut>' + ic('edit') + 'Ubah cut-off</button></div>' +
+    '<div class="kpis">' + kpi('Total RKA 1 tahun', rpS(A.t), num(A.n) + ' pos anggaran') + kpi('YTD budget', rpS(A.y), 's.d. ' + BLN_F[cut - 1]) + kpi('Realisasi YTD', rpS(A.r), 'diisi per pos anggaran') + kpi('Variance YTD', rpS(A.v), A.v < 0 ? 'melebihi anggaran' : 'sisa anggaran', A.v < 0 ? 'bad' : 'good') + kpi('Serapan YTD', pfP(A.p), 'realisasi / YTD budget') + '</div>' +
+    pfCard('RKA per bulan menurut kategori', 'Rupiah', rkaChart(all, cut)) +
+    pfCard('Rekap per kategori', 'Rupiah', rkaTable(RKA_K.filter(k => all.some(i => i.k === k)).map(k => { const it = all.filter(i => i.k === k), m = rkaTot(it); return { n: k, k, m, real: sum(it, i => +i.real || 0) }; }), cut, 'Total RKA')) +
+    secs.map((x, i) => '<section class="card"><div class="chead"><h3>' + esc(x.t) + '</h3><div class="cbtns"><span class="cmeta">' + rpS(rkaS(rkaTot(x.items))) + ' / tahun</span><button class="btn ghost sm" data-rkaed="' + view + ':' + i + '">' + ic('edit') + 'Ubah</button></div></div>' + rkaTable(x.items, cut, 'Total ' + x.t) + '</section>').join('') +
+    '<div class="cbtns" style="margin:0 0 14px"><button class="btn ghost sm" data-rkaadd="' + view + '">' + ic('plus') + (view === 'cogs' ? 'Tambah unit COGS' : 'Tambah bagian anggaran') + '</button></div>' +
+    (F && F.list.length ? pfCard('RKA dan Forecast produksi per bulan', 'kebutuhan dana indikatif', '<div class="tbl rkat"><table><thead><tr><th class="rkst">Uraian</th>' + BLN.map(b => '<th class="n">' + b + '</th>').join('') + '<th class="n">Total</th></tr></thead><tbody>' +
+      '<tr><td class="rkst">RKA ' + esc(BC) + '</td>' + A.m.map(v => '<td class="n">' + R0(v) + '</td>').join('') + '<td class="n"><b>' + R0(A.t) + '</b></td></tr>' +
+      '<tr><td class="rkst">Forecast biaya produksi BUASO + bunga (target riil)</td>' + A.m.map(() => '<td class="n">' + R0(F.per.m.biaya + F.per.m.bunga) + '</td>').join('') + '<td class="n"><b>' + R0((F.per.m.biaya + F.per.m.bunga) * 12) + '</b></td></tr>' +
+      '<tr><td class="rkst">Forecast omzet (target riil)</td>' + A.m.map(() => '<td class="n">' + R0(F.per.m.omzet) + '</td>').join('') + '<td class="n"><b>' + R0(F.per.m.omzet * 12) + '</b></td></tr>' +
+      '<tr class="grand"><td class="rkst">Sisa setelah biaya produksi dan RKA</td>' + A.m.map(v => '<td class="n">' + R0(F.per.m.omzet - F.per.m.biaya - F.per.m.bunga - v) + '</td>').join('') + '<td class="n">' + R0(F.per.m.omzet * 12 - (F.per.m.biaya + F.per.m.bunga) * 12 - A.t) + '</td></tr></tbody></table></div>' +
+      '<div class="cfoot">Indikatif: overhead (O) di Forecast bisa sebagian sama dengan pos Opex RKA (gaji staf, listrik, atensi), jadi baris sisa cenderung konservatif. Forecast per bulan = tahun / 12.</div>') : '');
+}
+function saveRka(mut) { const d = clone(rkaDoc() || { tahun: 2027, sumber: 'Isian manual', cut: 1, sec: [], cogs: [] }); delete d.id; Object.keys(d).forEach(k => { if (k[0] === '_') delete d[k]; }); mut(d); save('param', d, RKA_ID); }
+function rkaSecForm(view, idx) {
+  const d = rkaDoc() || {}, arr = view === 'cogs' ? d.cogs || [] : d.sec || [], x = arr[idx], isNew = !x;
+  const rows = (x ? x.items : []).map(i => { const r = { id: i.id, k: i.k, n: i.n, real: +i.real || '' }; rkaM(i).forEach((v, k) => { r['m' + k] = v || ''; }); return r; });
+  const tot = v => (v.items || []).reduce((a, r) => a + BLN.reduce((b, _, k) => b + (+r['m' + k] || 0), 0), 0);
+  openForm({
+    title: (isNew ? 'Tambah ' : 'Ubah ') + (view === 'cogs' ? 'COGS Unit' : 'Bagian RKA'), sub: BC + ' · nilai Rupiah per bulan, realisasi = akumulasi YTD s.d. cut-off', wide: true,
+    value: { t: x ? (view === 'cogs' ? x.u : x.t) : '', items: rows },
+    fields: [view === 'cogs' ? { k: 't', label: 'Unit', type: 'select', req: true, empty: false, opts: PF_U.map(u => ({ v: u, t: u + ' · ' + UNIT_NAME[u] })) } : { k: 't', label: 'Judul bagian', req: true, full: true, ph: 'contoh: Unit Bawen' },
+      { k: 'items', label: 'Pos anggaran', type: 'items', newRow: () => ({ k: view === 'cogs' ? 'COGS' : 'Opex' }), cols: [{ k: 'k', label: 'Kategori', type: 'select', opts: RKA_K.map(q => ({ v: q, t: q })), w: '118px' }, { k: 'n', label: 'Pos anggaran', w: '210px' }].concat(BLN.map((b, k) => ({ k: 'm' + k, label: b, num: true, w: '122px' })), [{ k: 'real', label: 'Realisasi YTD', num: true, w: '128px' }]) },
+      { k: 'sum', type: 'html', html: v => '<div class="buaso"><div class="tot"><span>Total 1 tahun</span><b>' + rp(tot(v)) + '</b><small>' + num((v.items || []).length) + ' pos</small></div></div>' }],
+    onDelete: isNew ? null : () => saveRka(q => { (view === 'cogs' ? q.cogs : q.sec).splice(idx, 1); }),
+    onSave: v => {
+      const items = (v.items || []).filter(r => String(r.n || '').trim()).map((r, i) => ({ id: r.id || 'n' + Date.now().toString(36) + i, k: r.k || 'Opex', n: String(r.n).trim(), m: BLN.map((_, k) => +r['m' + k] || 0), real: +r.real || 0 }));
+      if (items.some(i => i.m.some(q => q < 0) || i.real < 0)) { toast('Nilai tidak boleh negatif', 'err'); return false; }
+      saveRka(q => { const a = view === 'cogs' ? (q.cogs = q.cogs || []) : (q.sec = q.sec || []); const o = view === 'cogs' ? { u: v.t, items } : { t: String(v.t).trim(), items }; if (isNew) a.push(o); else a[idx] = o; });
+      toast('RKA tersimpan');
+    }
+  });
+}
+function rkaCutForm() {
+  const d = rkaDoc() || {};
+  openForm({ title: 'Cut-off YTD', sub: 'Bulan terakhir yang dihitung sebagai YTD budget', small: true, value: { cut: String(rkaCut(d)) }, fields: [{ k: 'cut', label: 'Bulan cut-off', type: 'select', empty: false, opts: BLN_F.map((b, k) => ({ v: String(k + 1), t: b + ' ' + (d.tahun || 2027) })) }], onSave: v => { saveRka(q => { q.cut = +v.cut || 1; }); toast('Cut-off tersimpan'); } });
+}
+function rkaAllCard(list) { // tab Semua Basecamp
+  const rows = list.map(D => ({ bc: D.bc, r: D.rka })).filter(x => x.r);
+  if (!rows.length) return '';
+  const ks = RKA_K.filter(k => rows.some(x => x.r.k[k])), T = f => sum(rows, x => f(x.r));
+  return pfCard('RKA Unit Produksi per basecamp', 'Rupiah per tahun', '<div class="tbl"><table><thead><tr><th>Basecamp</th>' + ks.map(k => '<th class="n">' + k + '</th>').join('') + '<th class="n">Total RKA</th><th class="n">YTD budget</th><th class="n">Realisasi YTD</th><th class="n">Serapan</th></tr></thead><tbody>' +
+    rows.map(x => '<tr><td class="strong">' + esc(x.bc) + '</td>' + ks.map(k => '<td class="n">' + R0(x.r.k[k]) + '</td>').join('') + '<td class="n"><b>' + R0(x.r.t) + '</b></td><td class="n">' + R0(x.r.y) + '<small>s.d. ' + BLN[x.r.cut - 1] + '</small></td><td class="n">' + R0(x.r.r) + '</td><td class="n">' + pfP(x.r.p) + '</td></tr>').join('') +
+    '<tr class="grand"><td>Semua basecamp</td>' + ks.map(k => '<td class="n">' + R0(T(r => r.k[k])) + '</td>').join('') + '<td class="n">' + R0(T(r => r.t)) + '</td><td class="n">' + R0(T(r => r.y)) + '</td><td class="n">' + R0(T(r => r.r)) + '</td><td class="n">' + pfP(T(r => r.y) ? T(r => r.r) / T(r => r.y) : null) + '</td></tr></tbody></table></div>');
+}
+async function rkaReport(s) {
+  const d = rkaDoc(); if (!d) { toast('Belum ada RKA', 'err'); return; }
+  const view = s.rv === 'cogs' ? 'cogs' : 'bc', cut = rkaCut(d), secs = view === 'cogs' ? (d.cogs || []).map(c => ({ t: 'COGS ' + c.u + ' - ' + UNIT_NAME[c.u], items: c.items || [] })) : d.sec || [], all = secs.flatMap(x => x.items), A = rkaAgg(all, cut);
+  const R = await pdfReport({ title: 'RKA ' + (d.tahun || 2027) + ' Unit Produksi' + (view === 'cogs' ? ' - COGS per Unit' : ''), sub: (view === 'cogs' ? 'Seluruh perusahaan' : BC) + ' · cut-off YTD ' + BLN_F[cut - 1] + ' · ' + (d.sumber || ''), orient: 'l', format: 'a3', fname: 'RKA_' + (d.tahun || 2027) + (view === 'cogs' ? '_COGS' : '') });
+  R.kv([['Total RKA 1 tahun', 'Rp ' + R_(A.t)], ['YTD budget', 'Rp ' + R_(A.y)], ['Realisasi YTD', 'Rp ' + R_(A.r)], ['Variance YTD', 'Rp ' + R_(A.v), A.v < 0 ? 'red' : ''], ['Serapan YTD', pfP(A.p)]], 5);
+  const head = ['Pos anggaran', 'Kategori'].concat(BLN, ['Total', 'YTD', 'Realisasi', 'Variance', 'Serapan']);
+  const line = (n, k, r) => [n, k].concat(r.m.map(v => cellR(R_(v))), [cellR(R_(r.t)), cellR(R_(r.y)), cellR(R_(r.r)), cellR(R_(r.v)), cellR(pfP(r.p))]);
+  const cs = { 0: { cellWidth: 62 } };
+  R.h2('Rekap per kategori');
+  const ks = RKA_K.filter(k => all.some(i => i.k === k));
+  R.table(head, ks.map(k => line(k, '', rkaAgg(all.filter(i => i.k === k), cut))), { fs: 6.6, cs, foot: line('Total RKA', '', A) });
+  secs.forEach(x => { R.h2(x.t); R.table(head, x.items.map(i => line(i.n, i.k, rkaRow(i, cut))), { fs: 6.6, cs, foot: line('Total', '', rkaAgg(x.items, cut)) }); });
+  R.sign(); await R.save();
+}
+
 /* ---------- semua basecamp ---------- */
 function pfAllHtml(list, s) {
   const { mode, key } = s, f = pfFrac(mode, key), keys = pfSeries(mode, key), nowK = pfKey(mode, today());
@@ -351,7 +455,7 @@ function pfAllHtml(list, s) {
     '<div class="sech"><h2>Tren per basecamp</h2></div><div class="pfgrid">' + list.map(D => pfCard('Basecamp ' + D.bc, 'rata-rata unit aktif', pfSlot({ type: 'line', title: 'Tren ' + D.bc, keys, mode, p: keys.map(k => k > nowK ? null : pfBcPct(D, mode, k)) }))).join('') + '</div>' +
     '<div class="sech"><h2>Tren per unit, seluruh basecamp</h2></div><div class="pfgrid">' + us.map(([u]) => { const a = keys.map(k => pfUnitAll(list, u, mode, k)); return pfCard(u + ' · ' + UNIT_PROD[u], PF_SAT[u] + ' per ' + PF_MODE[mode].k, pfSlot({ title: 'Realisasi dan target ' + u, keys, mode, cur: key, sat: PF_SAT[u], real: a.map(r => r.real), tg: a.map(r => r.tg) }) + pfLeg); }).join('') + '</div>' +
     pfCard('Tabel per basecamp', PF_MODE[mode].t, '<div class="tbl"><table><thead><tr><th>Periode</th>' + list.map(D => '<th class="n">' + esc(D.bc) + '</th>').join('') + '<th class="n">Keseluruhan</th></tr></thead><tbody>' + keys.filter(k => k <= nowK).reverse().map(k => '<tr><td class="strong">' + esc(pfLabel(mode, k)) + '</td>' + list.map(D => '<td class="n">' + pfP(pfBcPct(D, mode, k)) + '</td>').join('') + '<td class="n"><b>' + pfP(pfAllPct(list, mode, k)) + '</b></td></tr>').join('') + '</tbody></table></div>') +
-    pfCard('Forecast keuangan per basecamp', 'per tahun · target riil unit aktif', pfAllFc(list)) +
+    pfCard('Forecast keuangan per basecamp', 'per tahun · target riil unit aktif', pfAllFc(list)) + rkaAllCard(list) +
     '<div class="note">Per unit gabungan = jumlah realisasi dibagi jumlah target semua basecamp yang unitnya aktif. Per basecamp = rata-rata pencapaian unit aktifnya. Keseluruhan basecamp = rata-rata pencapaian keempat unit gabungan. Unit dihitung paling tinggi 100%.' + (list.some(D => !D.units.some(x => x.ev.length)) ? ' Belum ada data realisasi: ' + esc(list.filter(D => !D.units.some(x => x.ev.length)).map(D => D.bc).join(', ')) + '.' : '') + '</div>';
 }
 function pfAllFc(list) {
@@ -448,20 +552,21 @@ MODS.perf = {
     const st = stateOf('perf', { tab: 'main', unit: 'AMP' });
     if (!PF_U.includes(st.unit)) st.unit = 'AMP';
     if (!st.mode) { st.mode = 'm'; st.key = pfKey('m', today()); }
-    const multi = typeof EMBED !== 'undefined' && EMBED, tabs = [{ k: 'main', t: 'Keseluruhan Unit' }, { k: 'unit', t: 'Per Unit' }].concat(multi ? [{ k: 'all', t: 'Semua Basecamp' }] : [], [{ k: 'target', t: 'Target Produksi' }, { k: 'fc', t: 'Forecast' }]);
+    const multi = typeof EMBED !== 'undefined' && EMBED, tabs = [{ k: 'main', t: 'Keseluruhan Unit' }, { k: 'unit', t: 'Per Unit' }].concat(multi ? [{ k: 'all', t: 'Semua Basecamp' }] : [], [{ k: 'target', t: 'Target Produksi' }, { k: 'fc', t: 'Forecast' }, { k: 'rka', t: 'RKA' }]);
     if (!tabs.some(t => t.k === st.tab)) st.tab = 'main';
     let ctl;
     ctl = page(root, {
       key: 'perf', st, report: pfReport, tabs,
       actions: [{ id: 'real', t: 'Catat Produksi', icon: 'prod' }],
       on: { real: () => { if (all('prod').some(p => p.status !== 'Batal' && soStats(p).sisaProd > 0)) realForm(); else { toast('Belum ada SO / WO terbuka. Buat dulu di Kartu Produksi.', 'err'); location.hash = '#/prod'; } } },
-      filter: s => s.tab === 'target' ? '' : s.tab === 'fc' ? '<div class="fbar"><div class="seg" data-pfu>' + [['all', 'Semua unit aktif']].concat(PF_U.map(u => [u, u + ' · ' + UNIT_PROD[u]])).map(([v, t]) => '<button class="' + ((s.fu || 'all') === v ? 'on' : '') + '" data-v="' + v + '">' + t + '</button>').join('') + '</div></div>' : pfHead(s.mode, s.key) + (s.tab === 'unit' ? '<div class="fbar"><div class="seg" data-ps="unit">' + PF_U.map(u => '<button class="' + (s.unit === u ? 'on' : '') + '" data-v="' + u + '">' + u + ' · ' + UNIT_PROD[u] + '</button>').join('') + '</div></div>' : ''),
-      bindFilter: (el, s, redraw) => { pfHeadBind(el, s, redraw); $$('[data-ps] button', el).forEach(b => b.onclick = () => { s.unit = b.dataset.v; persist('perf'); redraw(); }); $$('[data-pfu] button', el).forEach(b => b.onclick = () => { s.fu = b.dataset.v; redraw(); }); },
+      filter: s => s.tab === 'target' ? '' : s.tab === 'rka' ? '<div class="fbar"><div class="seg" data-prv>' + [['bc', 'RKA ' + BC], ['cogs', 'COGS per unit (perusahaan)']].map(([v, t]) => '<button class="' + ((s.rv || 'bc') === v ? 'on' : '') + '" data-v="' + v + '">' + esc(t) + '</button>').join('') + '</div></div>' : s.tab === 'fc' ? '<div class="fbar"><div class="seg" data-pfu>' + [['all', 'Semua unit aktif']].concat(PF_U.map(u => [u, u + ' · ' + UNIT_PROD[u]])).map(([v, t]) => '<button class="' + ((s.fu || 'all') === v ? 'on' : '') + '" data-v="' + v + '">' + t + '</button>').join('') + '</div></div>' : pfHead(s.mode, s.key) + (s.tab === 'unit' ? '<div class="fbar"><div class="seg" data-ps="unit">' + PF_U.map(u => '<button class="' + (s.unit === u ? 'on' : '') + '" data-v="' + u + '">' + u + ' · ' + UNIT_PROD[u] + '</button>').join('') + '</div></div>' : ''),
+      bindFilter: (el, s, redraw) => { pfHeadBind(el, s, redraw); $$('[data-ps] button', el).forEach(b => b.onclick = () => { s.unit = b.dataset.v; persist('perf'); redraw(); }); $$('[data-pfu] button', el).forEach(b => b.onclick = () => { s.fu = b.dataset.v; redraw(); }); $$('[data-prv] button', el).forEach(b => b.onclick = () => { s.rv = b.dataset.v; redraw(); }); },
       body: s => {
         PF.ch = [];
         let h;
         if (s.tab === 'all') h = PF.all ? pfAllHtml(pfList(PF.all.bcs, Object.assign(PF.all.data, { [BCN]: S.docs })), s) : '<div class="empty"><p>' + esc(PF.err || 'Memuat data semua basecamp…') + '</p></div>';
         else if (s.tab === 'target') h = editBadge('Target Produksi') + pfTargetHtml(pfHere());
+        else if (s.tab === 'rka') h = editBadge('RKA') + '<div class="pffc">' + rkaHtml(pfHere(), s) + '</div>';
         else if (s.tab === 'fc') h = editBadge('Target Produksi') + '<div class="pffc">' + pfFcHtml(pfHere(), s) + '</div>';
         else h = s.tab === 'unit' ? pfUnitHtml(pfHere(), s) : pfMainHtml(pfHere(), s);
         return '<div class="pfroot">' + h + '</div>';
@@ -475,6 +580,11 @@ MODS.perf = {
         const q = $('[data-pfsrc]', el); if (q) q.onclick = () => PG(pfSrcForm)();
         $$('[data-pffc]', el).forEach(b => b.onclick = () => PG(pfFcCfgForm)());
         $$('[data-pfmix]', el).forEach(b => b.onclick = () => PG(pfMixForm)(b.dataset.pfmix));
+        const RG = fn => gated('RKA', fn);
+        $$('[data-rkaed]', el).forEach(b => b.onclick = () => { const [v, i] = b.dataset.rkaed.split(':'); RG(rkaSecForm)(v, +i); });
+        $$('[data-rkaadd]', el).forEach(b => b.onclick = () => RG(rkaSecForm)(b.dataset.rkaadd, -1));
+        $$('[data-rkacut]', el).forEach(b => b.onclick = () => RG(rkaCutForm)());
+        $$('[data-rkanew]', el).forEach(b => b.onclick = () => RG(rkaSecForm)('bc', -1));
       }
     });
     return ctl;
@@ -523,6 +633,7 @@ async function pfFcReport(s) {
   R.sign(); await R.save();
 }
 async function pfReport(s) {
+  if (s.tab === 'rka') return rkaReport(s);
   if (s.tab === 'fc') return pfFcReport(s);
   if (s.tab === 'all') { if (!PF.all) { toast('Data semua basecamp masih dimuat', 'err'); return; } return pfAllReport(pfList(PF.all.bcs, PF.all.data), s); }
   const D = pfHere(), { mode, key } = s, act = s.tab === 'unit' ? [D.by[s.unit]] : D.units.filter(x => x.aktif), nowK = pfKey(mode, today()), keys = pfSeries(mode, key).filter(k => k <= nowK);
