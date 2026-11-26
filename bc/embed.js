@@ -8,8 +8,8 @@
     const u = lsGet(LSP + 'user', null);
     S.user = u && u.id === sess.name ? u : { id: sess.name, name: disp() || sess.name, role: 'user', jabatan: '', wa: '' };
   } else S.user = null;
-  // Guide.pdf Basecamp Bawen ada di situs ahgbawen
-  document.addEventListener('click', e => { const a = e.target.closest && e.target.closest('a[href="Guide.pdf"]'); if (a) { e.preventDefault(); window.open('https://ahgbawen.github.io/Guide.pdf', '_blank', 'noopener'); } }, true);
+  // Guide.pdf Basecamp Bawen: /bc/Guide.pdf (situs ahgbawen sudah digabung ke sini)
+  document.addEventListener('click', e => { const a = e.target.closest && e.target.closest('a[href="Guide.pdf"]'); if (a) { e.preventDefault(); window.open('/bc/Guide.pdf', '_blank', 'noopener'); } }, true);
   // form terbuka → beri tahu halaman induk supaya tombol chat mengambang tidak menutupi tombol Simpan/Batal
   try {
     const pb = P && window.parent !== window && window.parent.document.body;
