@@ -3555,12 +3555,12 @@ function ikonInit() {
     .observe(document.body, { childList: true, subtree: true, characterData: true });
 }
 
-// Kartu Operasional per basecamp (20 kartu Basecamp Bawen) + pilihan basecamp global.
+// Kartu Operasional per basecamp (20 kartu + Buku Panduan Basecamp Bawen) + pilihan basecamp global.
 // Kartu tampil di <iframe> /bc/?bc=<basecamp>#/<kartu> (kode modul situs ahgbawen, data lewat fungsi bc_* dengan sesi Virtual Work).
 // Semua basecamp (termasuk 'Bawen', dipindah dari ahgbawen.github.io 2026-11-26) di bc_docs; '' (Semua Basecamp) = rekap semua basecamp.
 const KARTU = [['stok', 'Stok Material', 'stok'], ['prod', 'Produksi', 'prod'], ['perf', 'Performance', 'perf'], ['jual', 'Penjualan', 'jual'], ['proj', 'Kartu Project', 'proj'], ['kas', 'Cash Flow Unit', 'kas'], ['cust', 'Customer Unit', 'cust'],
   ['jadwal', 'Jadwal Pengiriman', 'jadwal'], ['bahan', 'Bahan & Supplier', 'bahan'], ['mt', 'Maintenance Alat', 'mt'], ['bppb', 'BPPB', 'bppb'], ['mp', 'Man Power', 'mp'],
-  ['mkt', 'Marketing', 'mkt'], ['dev', 'Pengembangan Basecamp', 'dev'], ['pl', 'Price List', 'tag'], ['hpp', 'HPP & BUASO', 'scale'], ['oh', 'Overhead per Unit', 'oh'], ['org', 'Struktur Organisasi', 'org'], ['flow', 'Flow Chart', 'flow'], ['sk', 'SK & Dokumen', 'skdok']];
+  ['mkt', 'Marketing', 'mkt'], ['dev', 'Pengembangan Basecamp', 'dev'], ['pl', 'Price List', 'tag'], ['hpp', 'HPP & BUASO', 'scale'], ['oh', 'Overhead per Unit', 'oh'], ['org', 'Struktur Organisasi', 'org'], ['flow', 'Flow Chart', 'flow'], ['sk', 'SK & Dokumen', 'skdok'], ['panduan', 'Buku Panduan', 'book']];
 const VICON = { home: 'grid', reminder: 'alarm', chat: 'chat', task: 'task', cash: 'kas', unit: 'prod', proyeksi: 'cal', wait: 'game', tools: 'tools', users: 'users', admin: 'crown', bc: 'basecamp' };
 const BC_OK = b => /^[A-Za-z0-9][A-Za-z0-9 ._-]{1,39}$/.test(b || '');
 const bcLabel = () => S.bc ? 'Basecamp ' + S.bc : 'Semua Basecamp';
@@ -3662,7 +3662,7 @@ const KCH = {
 };
 
 // Virtual Work AHG — reminder, global chat (+ whisper), task (+ rutin mingguan) dan kasbon tim. Data di Supabase (proyek ahg-produksi), sinkron real time.
-const BUILD = '20261126-232523';
+const BUILD = '20261127-062750';
 const SB_URL = 'https://herltzublcqpbgyxbbyp.supabase.co', SB_KEY = 'sb_publishable_FMSC0iqDRLsRXtvTtZX0Ow_piPi5bli'; // public key; tables closed, only ahg_* functions
 // File → Google Drive yulius.krisnawan (folder "AHG Produksi", 5 GiB) lewat Edge Function ahg-file: cek login, buka sesi upload Drive
 // (browser kirim byte langsung ke Google), unduh diproksikan per 8 MiB. Cadangan saat Drive terputus: Supabase Storage (bucket ahg-files).
@@ -5699,7 +5699,7 @@ boot();
 const PR = {
   AC: new Set(('AHG AMP CMP PCP SCP TM JPG WIB WITA WIT PDF WA HP PT CV UD BH DT SO PO DO SJ SPK SPB BBM ID OK ATK APD K3 P3K PPN PPH NPWP NIK ' +
     'KTP SIM STNK BPKB URL QR RT RW CCTV GPS PLN PDAM AC TV USB HRD GM QC QA SOP BOM SDM PU DPU PUPR SNI ISO PIC HSE MEP SPBU KB MB GB TB ' +
-    'UMKM BUMN CSR KPI SKU NB PS JL BPPB HPP BUASO WO').split(' ')),
+    'UMKM BUMN CSR KPI SKU NB PS JL BPPB HPP BUASO WO SK SOP PDF').split(' ')),
   UNIT: new Set(['cm', 'mm', 'km', 'kg', 'mg', 'ml', 'm2', 'm3', 'm²', 'm³', 'cm2', 'cm3', 'mm2']),
   KT: new Set(('di ke dari dan yang untuk pada dengan atau oleh bagi dalam tentang sebagai serta tetapi agar karena jika kalau maka per ' +
     'yg dgn utk dr dlm thd terhadap kepada akan the of and to in on at for a an').split(' ')),

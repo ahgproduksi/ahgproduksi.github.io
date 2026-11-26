@@ -248,7 +248,7 @@
       esc(r === 'kas' ? 'Cash flow seluruh basecamp: rincian uang masuk, uang keluar, piutang, dan hutang tiap basecamp dengan grand total.' : mod ? 'Ringkasan kartu ini di setiap basecamp. Pilih basecamp untuk membuka dan mengisi data.' : 'Ringkasan operasional seluruh basecamp PT. Armada Hada Graha — unit AMP, CMP, SCP, dan PCP.') + '</p></div></div>' +
       '<div class="pact"><button class="btn ghost" data-rf>' + ic('refresh') + '<span>Muat ulang</span></button>' + (r === 'perf' ? '<button class="btn dark" data-pfpdf>' + ic('print') + '<span>Cetak PDF</span></button>' : r === 'kas' ? '<button class="btn dark" data-kapdf>' + ic('print') + '<span>Cetak PDF</span></button>' : r === 'jual' ? '<button class="btn dark" data-jxpdf>' + ic('print') + '<span>Cetak PDF</span></button>' : mod ? '' : '<button class="btn dark" data-pdf>' + ic('print') + '<span>Cetak PDF</span></button>') + '</div></div>';
     if (!bcs.length) { html = head + '<div class="empty">' + ic('home') + '<p>Belum ada basecamp.</p></div>'; put(main, html); return; }
-    if (r === 'flow' || r === 'sk') { MG.on = false; if (main._h !== r || !APP.ctl) { main._h = r; main._f = 1; APP.ctl = MODS[r].render(main); } return; }
+    if (r === 'flow' || r === 'sk' || r === 'panduan') { MG.on = false; if (main._h !== r || !APP.ctl) { main._h = r; main._f = 1; APP.ctl = MODS[r].render(main); } return; }
     if (mod && MERGE[r]) { mergedView(main, r); return; }
     if (MG.on) { MG.on = false; main._h = ''; APP.ctl = null; }
     if (main._f) { main._f = 0; main._h = ''; APP.ctl = null; }

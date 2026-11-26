@@ -94,3 +94,10 @@ td.skact{white-space:nowrap;text-align:right}td.skact .btn,td.skact .ibtn{margin
 .skvw{height:min(78vh,1000px);display:flex;align-items:center;justify-content:center}.skvw iframe{width:100%;height:100%;border:0;background:#fff}
 .skvw img{max-width:100%;max-height:100%;object-fit:contain;background:#fff}.skvw .empty{color:#fff}.skvw .empty p{color:#e7ecf2}
 @media (max-width:640px){.skdoc{min-width:200px}td.skact .btn span{display:none}.skvw{height:72vh}}
+/* ---- Kartu 21 Buku Panduan (panduan.js) ---- */
+.pdunote{display:flex;align-items:center;gap:8px}.pdunote .ic{width:17px;height:17px;flex:none}
+.pduv{display:flex;flex-direction:column;align-items:center;gap:14px;padding:16px 0 30px;background:#5b6573;border-radius:12px;min-height:60vh}
+.pduv .empty{color:#fff}.pduv .empty p{color:#e7ecf2}
+.pdup{max-width:calc(100% - 16px);background:#fff;box-shadow:0 4px 14px rgba(0,0,0,.28);display:flex;align-items:center;justify-content:center;color:#9aa4b2;font-size:13px}
+.pdup canvas{display:block;max-width:100%;height:auto!important}
+@media (max-width:640px){.pduv{padding:8px 0 20px;gap:8px;border-radius:8px}}
