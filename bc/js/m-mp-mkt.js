@@ -33,7 +33,7 @@ MODS.mp = {
   },
   summary() { const a = all('mp').filter(m => m.status !== 'Nonaktif'); return { main: a.length + ' pekerja aktif', sub: UNITS.map(u => u + ' ' + a.filter(m => m.unit === u).length).join(' · ') }; }
 };
-function mpRows(s) { return all('mp').filter(m => (!s.unit || m.unit === s.unit) && (!s.status || (m.status || 'Aktif') === s.status) && qMatch(s.q, m.nama, m.jabatan, m.domisili, m.wa)).sort((a, b) => (UNITS.concat('Umum').indexOf(a.unit) - UNITS.concat('Umum').indexOf(b.unit)) || a.nama.localeCompare(b.nama)); }
+function mpRows(s) { return all('mp').filter(m => (!s.unit || m.unit === s.unit) && (!s.status || (m.status || 'Aktif') === s.status) && qMatch(s.q, m.nama, m.jabatan, m.domisili, m.wa, m._bc)).sort((a, b) => String(a._bc || '').localeCompare(String(b._bc || '')) || (UNITS.concat('Umum').indexOf(a.unit) - UNITS.concat('Umum').indexOf(b.unit)) || a.nama.localeCompare(b.nama)); }
 function gajiUnlock() {
   return new Promise(res => {
     openForm({
@@ -77,11 +77,12 @@ function mpForm(d) {
 }
 async function mpReport(s) {
   const rows = mpRows(s), g = GAJI.map;
-  const R = await pdfReport({ title: 'Data Man Power', sub: (s.unit ? UNIT_NAME[s.unit] : 'Seluruh unit') + ' · ' + (s.status || 'Semua status') + ' · per ' + tgl(today(), true) + (g ? ' · RAHASIA: memuat data gaji' : ''), orient: 'l', fname: 'Data_Man_Power' });
+  const R = await pdfReport({ title: 'Data Man Power' + (CFG.all ? ' Semua Basecamp' : ''), sub: (s.unit ? UNIT_NAME[s.unit] : 'Seluruh unit') + ' · ' + (s.status || 'Semua status') + ' · per ' + tgl(today(), true) + (g ? ' · RAHASIA: memuat data gaji' : ''), orient: 'l', fname: 'Data_Man_Power' });
   R.kv(UNITS.concat('Umum').map(u => [u === 'Umum' ? 'Umum' : 'Unit ' + u, String(rows.filter(m => m.unit === u).length) + ' orang']), 5);
-  const head = ['No', 'Nama', 'NIK', 'Jabatan', 'Unit', 'WhatsApp / HP', 'Domisili', 'Mulai Bekerja', 'Status'].concat(g ? ['Gaji / Bulan'] : []);
-  R.table(head, rows.map((m, i) => [i + 1, m.nama, m.nik || '-', m.jabatan || '-', m.unit, waShow(m.wa), m.domisili || '-', tgl(m.masuk), m.status || 'Aktif'].concat(g ? [cellR(g[m.id] != null ? R_(g[m.id]) : '-')] : [])),
-    { fs: 7.6, cs: { 0: { halign: 'center', cellWidth: 8 } }, foot: g ? ['', 'Total', '', '', '', '', '', '', '', cellR(R_(sum(rows, m => g[m.id] || 0)))] : undefined });
+  const bcCol = !!CFG.all; // Semua Basecamp: kolom basecamp asal pekerja
+  const head = ['No'].concat(bcCol ? ['Basecamp'] : [], ['Nama', 'NIK', 'Jabatan', 'Unit', 'WhatsApp / HP', 'Domisili', 'Mulai Bekerja', 'Status']).concat(g ? ['Gaji / Bulan'] : []);
+  R.table(head, rows.map((m, i) => [i + 1].concat(bcCol ? [m._bc || '-'] : [], [m.nama, m.nik || '-', m.jabatan || '-', m.unit, waShow(m.wa), m.domisili || '-', tgl(m.masuk), m.status || 'Aktif']).concat(g ? [cellR(g[m.id] != null ? R_(g[m.id]) : '-')] : [])),
+    { fs: 7.6, cs: { 0: { halign: 'center', cellWidth: 8 } }, foot: g ? ['', 'Total'].concat(bcCol ? [''] : [], ['', '', '', '', '', '', '', cellR(R_(sum(rows, m => g[m.id] || 0)))]) : undefined });
   if (!g) R.para('Data gaji tidak dicetak karena terkunci. Buka dengan kata sandi gaji untuk menyertakannya.', 8);
   R.sign([['Dibuat oleh', S.user.name], ['HRD / Personalia', ''], ['Kepala Basecamp', '']]);
   await R.save();

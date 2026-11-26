@@ -37,6 +37,7 @@
       seq = Math.max(seq, r.seq || 0); more = r.more;
     }
     if (changed) lsSet(key, { seq, docs: [...m.values()] });
+    m._seq = seq;
     return m;
   }
   function withDocs(m, fn) { const keep = S.docs; S.docs = m; S.ver = (S.ver || 0) + 1; try { return fn(); } catch (e) { console.error(e); return null; } finally { S.docs = keep; S.ver = (S.ver || 0) + 1; } }
@@ -95,6 +96,150 @@
   }
   const sumOf = (bc, k) => R0.data[bc] ? withDocs(R0.data[bc], () => MODS[k].summary()) : null;
   const pick = (bc, r) => { if (P && P.pick) P.pick(bc, r); };
+
+  /* ---------- Semua Basecamp = kartu asli dengan data gabungan semua basecamp ----------
+     S.docs diganti gabungan dokumen tiap basecamp (data._bc = basecamp asal); tabel diberi kolom Basecamp;
+     simpan/ubah/hapus dikirim ke basecamp pemilik data, data baru menanyakan basecamp tujuan. */
+  const MERGE = { stok: 1, prod: 1, proj: 1, cust: 1, jadwal: 1, bahan: 1, mt: 1, bppb: 1, mp: 1, mkt: 1, dev: 1 };
+  const MG = { on: false, ver: -1, last: '', bc: '', bcAt: 0, pend: 0, wait: [], asking: false };
+  R0.ver = 0;
+  function mergeDocs() {
+    const M = new Map();
+    R0.bcs.forEach(bc => {
+      const m = R0.data[bc]; if (!m) return;
+      m.forEach((d, id) => {
+        const key = M.has(id) ? bc + '::' + id : id;
+        M.set(key, Object.assign({}, d, { id: key, _bc: bc, _oid: id, data: Object.assign({}, d.data, { _bc: bc }) }));
+      });
+    });
+    return M;
+  }
+  const bcOfRow = x => { if (!x || typeof x !== 'object') return ''; if (x._bc) return x._bc; for (const k in x) { const v = x[k]; if (v && typeof v === 'object' && !Array.isArray(v) && v._bc) return v._bc; } return ''; };
+  const table0 = window.table;
+  window.table = function (cols, rows, o) {
+    if (MG.on && rows && rows.length && !cols.some(c => c.t === 'Basecamp') && rows.some(bcOfRow))
+      cols = [{ t: 'Basecamp', f: x => { const b = bcOfRow(x); return b ? '<span class="bcbadge sm" style="--bct:' + bcTone(b) + '">' + esc(b) + '</span>' : ''; }, raw: true }].concat(cols);
+    return table0(cols, rows, o);
+  };
+  const refill = debounce(() => { if (MG.on && APP.ctl) { APP.ctl.fill(); mgExtra(); } }, 60);
+  // referensi ke dokumen lain (mis. pembayaran → invoice) menentukan basecamp & dikembalikan ke id asli
+  function refBc(data) {
+    let bc = '';
+    const out = {};
+    for (const k in data) {
+      const v = data[k];
+      const d = typeof v === 'string' && v.length > 3 ? S.docs.get(v) : null;
+      if (d && d._bc) { bc = bc || d._bc; out[k] = d._oid; } else out[k] = v;
+    }
+    delete out._bc;
+    return { bc, data: out };
+  }
+  function sendPut(bc, doc) {
+    MG.pend++;
+    const q = (MG.q = MG.q || {});
+    q[bc] = (q[bc] || Promise.resolve()).then(async () => {
+      try {
+        const r = await rpcRaw('bc_put', { p_token: S.token, p_bc: bc, p_docs: [doc] });
+        if (r && r.err === 'auth') { authLost(); return; }
+        if (r && r.rej && r.rej.length) { EDITK.until = 0; toast('Perubahan ditolak: perlu kata sandi edit', 'err'); }
+        else if (r && r.err) toast('Data ditolak server (' + r.err + ')', 'err');
+      } catch { toast('Gagal menyimpan ke ' + bc + ' — periksa koneksi internet', 'err'); }
+      try { R0.data[bc] = await loadBc(bc); R0.ver++; } catch { }
+    }).finally(() => { MG.pend--; if (!MG.pend) draw(); });
+    return q[bc];
+  }
+  function mgPut(kind, data, id, del) {
+    const cur = id ? S.docs.get(id) : null;
+    const rb = refBc(data || {});
+    let bc = (cur && cur._bc) || (data && data._bc) || rb.bc || '';
+    const oid = cur ? cur._oid : (id || uid(kind.slice(0, 2)));
+    const key = cur ? cur.id : oid;
+    const now = new Date().toISOString();
+    const raw = { id: oid, kind, data: rb.data, by: S.user ? S.user.name : '', at: now, created: cur ? cur.created : now, del: !!del, seq: cur ? cur.seq : 0, pending: true };
+    if (!bc && MG.bc && Date.now() - MG.bcAt < 4000) bc = MG.bc; // beberapa dokumen dari satu simpan
+    const show = b => { S.docs.set(key, Object.assign({}, raw, { id: key, _bc: b, _oid: oid, data: Object.assign({}, rb.data, { _bc: b }) })); S.ver = (S.ver || 0) + 1; refill(); };
+    if (bc && R0.data[bc]) {
+      R0.data[bc].set(oid, raw); show(bc);
+      MG.wait.forEach(w => w.key === key && w.res(bc));
+      sendPut(bc, { id: oid, kind, data: rb.data, del: !!del });
+      return key;
+    }
+    show('');
+    let res; const pr = new Promise(r => { res = r; });
+    MG.wait.push({ key, res, pr, raw, kind });
+    askBc();
+    return key;
+  }
+  function askBc() {
+    if (MG.asking) return; MG.asking = true;
+    setTimeout(() => {
+      const n = MG.wait.filter(w => !w.done).length;
+      openForm({
+        title: 'Simpan ke Basecamp', sub: n > 1 ? n + ' data baru' : 'Data baru ini milik basecamp mana?', small: true, value: { bc: MG.bc || '' }, saveLabel: 'Simpan',
+        fields: [{ k: 'bc', label: 'Basecamp', type: 'select', opts: R0.bcs.filter(b => R0.data[b]), req: true }],
+        onCancel: () => { MG.asking = false; MG.wait.filter(w => !w.done).forEach(w => { w.done = true; S.docs.delete(w.key); w.res(''); }); MG.wait = []; S.ver++; refill(); toast('Data baru tidak disimpan', 'err'); },
+        onSave: x => {
+          MG.asking = false; MG.bc = x.bc; MG.bcAt = Date.now();
+          const ws = MG.wait.filter(w => !w.done); MG.wait = [];
+          ws.forEach(w => { w.done = true; R0.data[x.bc].set(w.raw.id, w.raw); S.docs.set(w.key, Object.assign({}, w.raw, { id: w.key, _bc: x.bc, _oid: w.raw.id, data: Object.assign({}, w.raw.data, { _bc: x.bc }) })); sendPut(x.bc, { id: w.raw.id, kind: w.kind, data: w.raw.data, del: false }); w.res(x.bc); });
+          S.ver++; refill(); toast('Tersimpan di Basecamp ' + x.bc);
+        }
+      });
+    }, 30);
+  }
+  // basecamp dokumen (menunggu pilihan basecamp untuk data baru)
+  const docBc = id => { const d = S.docs.get(id); if (d && d._bc) return Promise.resolve(d._bc); const w = MG.wait.find(w => w.key === id); return w ? w.pr : Promise.resolve(''); };
+  const put0 = window.put;
+  window.put = (kind, data, id, del) => MG.on ? mgPut(kind, data, id, del) : put0(kind, data, id, del);
+  // gaji Man Power: satu kata sandi gaji untuk semua basecamp
+  const rpc0 = CFG.rpc;
+  CFG.rpc = async (fn, a, raw) => {
+    if (fn === 'bw_gaji_get') {
+      const out = {}, bcs = R0.bcs.filter(b => R0.data[b]);
+      for (let i = 0; i < bcs.length; i++) {
+        const r = await raw('bc_gaji_get', Object.assign({}, a, { p_bc: bcs[i] }));
+        if (r && r.err) { if (i === 0 || r.err === 'pin' || r.err === 'auth') return r; continue; }
+        const g = (r && r.gaji) || {};
+        for (const id in g) { let key = id; for (const [k, d] of S.docs) if (d._bc === bcs[i] && d._oid === id) { key = k; break; } out[key] = g[id]; }
+      }
+      return { ok: true, gaji: out };
+    }
+    if (fn === 'bw_gaji_set') {
+      const bc = await docBc(a.p_id); if (!bc) return { err: 'basecamp' };
+      const d = S.docs.get(a.p_id);
+      return raw('bc_gaji_set', Object.assign({}, a, { p_bc: bc, p_id: d ? d._oid : a.p_id }));
+    }
+    if ((fn === 'bw_put' || fn === 'bw_sync') && !a.p_bc) return { err: 'semua' }; // tidak pernah ke basecamp "Semua"
+    return rpc0(fn, a, raw);
+  };
+  // ringkasan & tombol buka per basecamp di bawah kartu gabungan
+  function mgExtra() {
+    const main = $('#main'); if (!main || !main.querySelector('.pres')) return;
+    let box = $('.mgx', main); if (!box) { main.insertAdjacentHTML('beforeend', '<div class="mgx"></div>'); box = $('.mgx', main); }
+    const r = APP.route, mod = MODS[r];
+    const html = (r === 'bppb' ? bppbAll() : '') +
+      '<div class="sech"><h2>Per Basecamp</h2><p>Ringkasan ' + esc(mod.title) + ' tiap basecamp' + (R0.busy ? ' — memuat data…' : '') + '. Buka basecamp untuk melihat kartunya sendiri.</p></div><div class="cards">' + R0.bcs.map((bc, i) => {
+        const s = sumOf(bc, r) || {};
+        return '<a class="mcard" href="#" data-pick="' + esc(bc) + '" style="--d:' + (i * 35) + 'ms;--bct:' + bcTone(bc) + '"><div class="mtop"><span class="mic">' + ic('home') + '</span><em>' + String(i + 1).padStart(2, '0') + '</em></div><h3>Basecamp ' + esc(bc) + '</h3><p>' + esc(mod.title) + '</p>' +
+          '<div class="mstat ' + (s.tone || '') + '"><b>' + esc(R0.data[bc] ? s.main || '' : 'Memuat…') + '</b><span>' + esc(s.sub || '') + '</span></div><span class="mgo">Buka kartu' + ic('right') + '</span></a>';
+      }).join('') + '</div>';
+    if (box._h === html) return;
+    box._h = html; box.innerHTML = html;
+    $$('[data-pick]', box).forEach(b => b.onclick = e => { e.preventDefault(); pick(b.dataset.pick, r); });
+  }
+  function mergedView(main, r) {
+    MG.on = true;
+    if (!main._mgo) { main._mgo = new MutationObserver(() => { if (MG.on && main.querySelector('.pres') && !main.querySelector('.mgx')) mgExtra(); }); main._mgo.observe(main, { childList: true }); } // halaman digambar ulang (mis. Tampilkan Gaji)
+    let changed = false;
+    if (MG.ver !== R0.ver && !MG.pend && !MG.wait.length) { S.docs = mergeDocs(); MG.ver = R0.ver; S.ver = (S.ver || 0) + 1; changed = true; }
+    if (main._h !== 'mg:' + r || !APP.ctl || !main.querySelector('.pres')) {
+      main._h = 'mg:' + r; main._f = 0;
+      APP.ctl = MODS[r].render(main);
+      mgExtra();
+      void main.offsetWidth; main.classList.add('enter');
+    } else if (changed) { APP.ctl.fill(); mgExtra(); }
+    else mgExtra();
+  }
   function draw() {
     const main = $('#main'); if (!main) return;
     const r = APP.route, mod = MODS[r];
@@ -103,7 +248,9 @@
       esc(r === 'kas' ? 'Cash flow seluruh basecamp: rincian uang masuk, uang keluar, piutang, dan hutang tiap basecamp dengan grand total.' : mod ? 'Ringkasan kartu ini di setiap basecamp. Pilih basecamp untuk membuka dan mengisi data.' : 'Ringkasan operasional seluruh basecamp PT. Armada Hada Graha — unit AMP, CMP, SCP, dan PCP.') + '</p></div></div>' +
       '<div class="pact"><button class="btn ghost" data-rf>' + ic('refresh') + '<span>Muat ulang</span></button>' + (r === 'perf' ? '<button class="btn dark" data-pfpdf>' + ic('print') + '<span>Cetak PDF</span></button>' : r === 'kas' ? '<button class="btn dark" data-kapdf>' + ic('print') + '<span>Cetak PDF</span></button>' : r === 'jual' ? '<button class="btn dark" data-jxpdf>' + ic('print') + '<span>Cetak PDF</span></button>' : mod ? '' : '<button class="btn dark" data-pdf>' + ic('print') + '<span>Cetak PDF</span></button>') + '</div></div>';
     if (!bcs.length) { html = head + '<div class="empty">' + ic('home') + '<p>Belum ada basecamp.</p></div>'; put(main, html); return; }
-    if (r === 'flow') { if (main._h !== 'flow' || !APP.ctl) { main._h = 'flow'; main._f = 1; APP.ctl = MODS.flow.render(main); } return; }
+    if (r === 'flow') { MG.on = false; if (main._h !== 'flow' || !APP.ctl) { main._h = 'flow'; main._f = 1; APP.ctl = MODS.flow.render(main); } return; }
+    if (mod && MERGE[r]) { mergedView(main, r); return; }
+    if (MG.on) { MG.on = false; main._h = ''; APP.ctl = null; }
     if (main._f) { main._f = 0; main._h = ''; APP.ctl = null; }
     if (r === 'perf') { pfAllMount(main, head, bcs, R0.data); const rf = $('[data-rf]', main); if (rf) rf.onclick = () => loadAll(true); return; }
     if (r === 'jual' && typeof jxAllHtml === 'function') { jualAll(main, head); return; }
@@ -329,7 +476,7 @@
     R0.busy = true; R0.err = ''; draw();
     for (const bc of R0.bcs) {
       if (R0.data[bc] && !force) continue;
-      try { R0.data[bc] = await loadBc(bc); } catch (e) { if (e.message === 'auth') return; R0.err = 'Sebagian data belum termuat (' + bc + '): periksa koneksi internet.'; }
+      try { const m = await loadBc(bc); if (!R0.data[bc] || m._seq !== R0.data[bc]._seq) { R0.data[bc] = m; R0.ver++; } } catch (e) { if (e.message === 'auth') return; R0.err = 'Sebagian data belum termuat (' + bc + '): periksa koneksi internet.'; }
       draw();
     }
     R0.busy = false; draw();
@@ -337,10 +484,10 @@
   startApp = function () {
     document.body.className = 'in embed';
     $('#app').innerHTML = '<div class="mainw"><main id="main"></main></div>';
-    const go = () => { APP.route = (location.hash.replace(/^#\/?/, '') || '').split('?')[0]; if (!MODS[APP.route]) APP.route = ''; CFG.onRoute(APP.route, MODS[APP.route] ? MODS[APP.route].title : 'Rekap Semua Basecamp'); draw(); window.scrollTo(0, 0); };
+    const go = () => { const prev = APP.route; APP.route = (location.hash.replace(/^#\/?/, '') || '').split('?')[0]; if (prev === 'mp' && APP.route !== 'mp' && MODS.mp.leave) MODS.mp.leave(); if (!MODS[APP.route]) APP.route = ''; CFG.onRoute(APP.route, MODS[APP.route] ? MODS[APP.route].title : 'Rekap Semua Basecamp'); draw(); window.scrollTo(0, 0); };
     window.onhashchange = go;
     window.addEventListener('unitx', () => { if (APP.route === 'prod') draw(); }); // input produksi unit berubah di Virtual Work
     go(); loadAll();
-    setInterval(() => { if (!document.hidden && !R0.busy) loadAll(true); }, 60000);
+    setInterval(() => { if (!document.hidden && !R0.busy && !MG.pend && !MG.wait.length && !MODALS.length) loadAll(true); }, 60000);
   };
 })();

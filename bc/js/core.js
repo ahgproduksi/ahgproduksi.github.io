@@ -6,7 +6,7 @@ const ADMIN_WA = '6282299774825';
 const PT = 'PT. Armada Hada Graha';
 const CFG = window.BC_CFG || {}; // diisi oleh ahgproduksi.github.io/bc/ (mode tertanam, banyak basecamp); kosong = situs Basecamp Bawen
 const BCN = CFG.name || 'Bawen'; // nama basecamp
-const BC = 'Basecamp ' + BCN;
+const BC = CFG.all ? 'Semua Basecamp' : 'Basecamp ' + BCN;
 const BCODE = CFG.code || 'BWN'; // kode penomoran dokumen
 const LSP = CFG.ls || 'bw.'; // awalan localStorage (per basecamp di mode tertanam)
 const EMBED = !!CFG.embed;

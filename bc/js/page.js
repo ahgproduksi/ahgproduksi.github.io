@@ -10,8 +10,11 @@ function bcTone(n) { if (BC_TONE[n]) return BC_TONE[n]; let h = 0; for (const c 
 function bcList() { try { return CFG.parent && CFG.parent.list ? CFG.parent.list() : []; } catch { return []; } }
 // label basecamp = pemilih basecamp (pindah basecamp langsung dari kartu mana pun; '' = Semua Basecamp)
 function bcBadge() {
-  if (!CFG.embed || CFG.all) return '';
-  const l = bcList(); if (!l.includes(BCN)) l.push(BCN);
+  if (!CFG.embed) return '';
+  const l = bcList();
+  if (CFG.all) return CFG.parent && CFG.parent.pick ? ' <label class="bcbadge bcpick" style="--bct:#334155" title="Pilih basecamp"><select data-bcpick aria-label="Pilih basecamp">' +
+    l.map(b => '<option value="' + esc(b) + '">Basecamp ' + esc(b) + '</option>').join('') + '<option value="" selected>Semua Basecamp</option></select></label>' : '';
+  if (!l.includes(BCN)) l.push(BCN);
   if (!CFG.parent || !CFG.parent.pick) return ' <span class="bcbadge" style="--bct:' + bcTone(BCN) + '">' + esc(BC) + '</span>';
   return ' <label class="bcbadge bcpick" style="--bct:' + bcTone(BCN) + '" title="Pilih basecamp"><select data-bcpick aria-label="Pilih basecamp">' +
     l.map(b => '<option value="' + esc(b) + '"' + (b === BCN ? ' selected' : '') + '>Basecamp ' + esc(b) + '</option>').join('') + '<option value="">Semua Basecamp</option></select></label>';

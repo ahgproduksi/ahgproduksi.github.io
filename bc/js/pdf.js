@@ -113,7 +113,7 @@ async function pdfReport({ title, sub, orient = 'p', fname, format = 'a4' }) {
       R.need(36 + extra);
       y += 2;
       doc.setFont('helvetica', 'normal'); doc.setTextColor(...INK);
-      doc.text(BCN + ', ' + pdfClean(tgl(today(), true)), W - M, y, { align: 'right' });
+      doc.text((CFG.all ? '' : BCN + ', ') + pdfClean(tgl(today(), true)), W - M, y, { align: 'right' });
       y += 5;
       list.forEach(([role, name], i) => {
         const cx = M + cw * i + cw / 2;
@@ -132,11 +132,11 @@ async function pdfReport({ title, sub, orient = 'p', fname, format = 'a4' }) {
         doc.setFont('helvetica', 'bold'); doc.setFontSize(13.5); doc.setTextColor(...NAVY);
         doc.text('PT. ARMADA HADA GRAHA', M + lw + 4, 13);
         doc.setFont('helvetica', 'normal'); doc.setFontSize(8.6); doc.setTextColor(...INK);
-        doc.text(BC + '  |  Unit Produksi AMP - CMP - SCP - PCP', M + lw + 4, 18);
+        doc.text((CFG.all ? 'Semua Basecamp' : BC) + '  |  Unit Produksi AMP - CMP - SCP - PCP', M + lw + 4, 18);
         doc.setFontSize(7.6); doc.setTextColor(...MUTED);
         doc.text('Trust and Integrity', M + lw + 4, 22.4);
         doc.setFont('helvetica', 'normal'); doc.setFontSize(8.6);
-        const leftEnd = M + lw + 4 + doc.getTextWidth(BC + '  |  Unit Produksi AMP - CMP - SCP - PCP');
+        const leftEnd = M + lw + 4 + doc.getTextWidth((CFG.all ? 'Semua Basecamp' : BC) + '  |  Unit Produksi AMP - CMP - SCP - PCP');
         const rw = W - M - leftEnd - 8;
         let fs = 8, tl;
         doc.setFont('helvetica', 'bold');
@@ -149,7 +149,7 @@ async function pdfReport({ title, sub, orient = 'p', fname, format = 'a4' }) {
         doc.setDrawColor(...LINE); doc.setLineWidth(0.2); doc.line(M, H - 11, W - M, H - 11);
         doc.setFontSize(7); doc.setTextColor(...MUTED);
         doc.text(pdfClean('Dicetak oleh ' + (S.user ? S.user.name : '-') + ' pada ' + tglJam(Date.now())), M, H - 7);
-        doc.text('Sistem Informasi Produksi ' + BC, W / 2, H - 7, { align: 'center' });
+        doc.text('Sistem Informasi Produksi ' + (CFG.all ? 'Semua Basecamp' : BC), W / 2, H - 7, { align: 'center' });
         doc.text('Halaman ' + i + ' dari ' + n, W - M, H - 7, { align: 'right' });
       }
       const name = (fname || title).replace(/[^\w\- ]+/g, '').replace(/\s+/g, '_') + '_' + today() + '.pdf';
