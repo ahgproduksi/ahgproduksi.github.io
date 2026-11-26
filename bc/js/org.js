@@ -45,6 +45,94 @@ function orgDesc(list, id) { const out = new Set(); const walk = x => orgKids(li
 function orgLevel(list, p) { let n = 1, x = p; const seen = new Set(); while (x && x.atasan && !seen.has(x.id)) { seen.add(x.id); x = list.find(q => q.id === x.atasan); n++; } return n; }
 const orgFill = p => (p.orang || []).filter(o => o.nama).length;
 
+/* ---- Susunan hubungan koordinasi otomatis, mengikuti urutan (tingkat) jabatan ----
+   Tingkat 1 pimpinan basecamp · 2 kepala/koordinator unit & fungsi di bawah pimpinan · 3 staf, admin, operator, mekanik, sopir · 4 pelaksana (helper, tenaga harian, satpam, OB).
+   Garis komando (atasan ↔ bawahan langsung) tidak dihitung sebagai koordinasi. Koordinasi = rekan setingkat dengan atasan yang sama,
+   rekan setingkat satu unit, rekan setingkat dengan fungsi yang sama di unit lain, rekan satu atasan satu tingkat di bawah/atas,
+   kepala unit ↔ staf yang menangani unitnya, dan pasangan fungsi pendukung (admin–marketing–logistik–keamanan, maintenance–operator). */
+const ORG_UN = ['AMP', 'CMP', 'SCP', 'PCP'];
+const ORG_TIER = ['', 'Pimpinan', 'Kepala / koordinator', 'Staf & operator', 'Pelaksana'];
+function orgFn(p) {
+  const j = ' ' + String(p.jabatan || '').toLowerCase().replace(/\([^)]*\)/g, ' ').replace(/[^a-z0-9]+/g, ' ') + ' ';
+  const f = new Set(), has = re => re.test(j);
+  if (has(/ (kepala|kabag|kasie|koordinator|manager|manajer|supervisor|mandor|wakil) /)) f.add('head');
+  if (has(/ (admin|administrasi|kasir|keuangan|akuntansi|akunting) /)) f.add('adm');
+  if (has(/ (sales|marketing|pemasaran) /)) f.add('mkt');
+  if (has(/ (maintenance|mekanik|teknisi|teknik|elektrik|perawatan|bengkel) /)) f.add('mnt');
+  if (has(/ (laborat|laboratorium|lab|qc|quality|mutu) /)) f.add('lab');
+  if (has(/ (logistik|gudang|checker|material) /)) f.add('log');
+  if (has(/ (satpam|security|keamanan) /)) f.add('sec');
+  if (has(/ operator /)) f.add('op');
+  if (has(/ (sopir|driver) /)) f.add('drv');
+  if (has(/ (helper|tenaga|ob|kebersihan|tukang|kenek|pembantu) /)) f.add('hlp');
+  return f;
+}
+function orgUnitsOf(p) {
+  const s = new Set(); if (ORG_UN.includes(p.unit)) s.add(p.unit);
+  const j = ' ' + String(p.jabatan || '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ') + ' ';
+  ORG_UN.forEach(u => { if (j.includes(' ' + u + ' ')) s.add(u); }); if (j.includes(' PRECAST ')) s.add('PCP');
+  return s;
+}
+function orgTierOf(p, f, rootId) {
+  if (!p.atasan) return 1;
+  if (f.has('head')) return p.atasan === rootId ? 2 : 3;
+  if (f.has('hlp') || f.has('sec')) return 4;
+  if (p.atasan === rootId && f.has('mkt') && !/\b(mt|staf|staff)\b/i.test(p.jabatan || '')) return 2;
+  return 3;
+}
+const ORG_SAMEFN = ['adm', 'mkt', 'mnt', 'lab', 'log', 'sec', 'op', 'drv'];
+const ORG_PAIR = [['adm', 'mkt'], ['adm', 'log'], ['sec', 'log'], ['sec', 'adm'], ['mnt', 'mnt'], ['lab', 'lab'], ['op', 'mnt']];
+const ORG_FN_T = { adm: 'administrasi', mkt: 'pemasaran', mnt: 'maintenance', lab: 'laboratorium / mutu', log: 'logistik', sec: 'keamanan', op: 'operator', drv: 'pengemudi' };
+function orgPairWhy(a, b) {
+  const ov = [...a.un].some(u => b.un.has(u));
+  if (a.t === b.t) {
+    if (a.p.atasan === b.p.atasan) return 'Rekan setingkat, satu atasan';
+    if (ov) return 'Rekan setingkat, satu unit';
+    const k = ORG_SAMEFN.find(x => a.f.has(x) && b.f.has(x)); if (k) return 'Rekan setingkat, sesama ' + ORG_FN_T[k];
+  }
+  if (Math.abs(a.t - b.t) === 1) {
+    const [hi, lo] = a.t < b.t ? [a, b] : [b, a];
+    if (a.p.atasan === b.p.atasan) return 'Satu atasan, ' + (hi === a ? 'satu tingkat di bawah' : 'satu tingkat di atas');
+    if (hi.t === 2 && hi.f.has('head') && ov) return hi === a ? 'Staf yang menangani unit ini' : 'Kepala unit yang ditangani';
+  }
+  if (Math.abs(a.t - b.t) <= 1) {
+    for (const [x, y] of ORG_PAIR) {
+      if (!((a.f.has(x) && b.f.has(y)) || (a.f.has(y) && b.f.has(x)))) continue;
+      if (x === 'op' && !(ov || !(a.f.has('mnt') ? a : b).un.size)) continue; // operator ↔ maintenance: satu unit atau maintenance umum
+      return x === y ? 'Sesama ' + ORG_FN_T[x] : 'Fungsi pendukung ' + ORG_FN_T[a.f.has(x) && b.f.has(y) ? x : y] + ' – ' + ORG_FN_T[a.f.has(x) && b.f.has(y) ? y : x];
+    }
+  }
+  return '';
+}
+/* rel(id) → { t: tingkat, up: atasan, down: [bawahan], kor: Map(id → alasan) } — koordinasi otomatis + tambahan manual (field kor), selalu dua arah */
+function orgRel() {
+  return memo('orgRel', () => {
+    const list = orgPos(), root = list.find(p => !p.atasan), rootId = root ? root.id : '';
+    const order = []; const walk = id => orgKids(list, id).forEach(p => { order.push(p); walk(p.id); }); walk(''); list.forEach(p => { if (!order.includes(p)) order.push(p); });
+    const info = order.map(p => { const f = orgFn(p); return { p, f, un: orgUnitsOf(p), t: orgTierOf(p, f, rootId) }; });
+    const by = new Map(info.map(x => [x.p.id, x]));
+    const R = new Map(info.map(x => [x.p.id, { t: x.t, up: x.p.atasan || '', down: orgKids(list, x.p.id).map(k => k.id), kor: new Map() }]));
+    const cmd = (a, b) => a.p.atasan === b.p.id || b.p.atasan === a.p.id;
+    for (let i = 0; i < info.length; i++) for (let j = i + 1; j < info.length; j++) {
+      const a = info[i], b = info[j]; if (cmd(a, b) || a.t === 1 || b.t === 1) continue;
+      const why = orgPairWhy(a, b); if (!why) continue;
+      R.get(a.p.id).kor.set(b.p.id, why); R.get(b.p.id).kor.set(a.p.id, orgPairWhy(b, a));
+    }
+    info.forEach(a => (a.p.kor || []).forEach(k => { const b = by.get(k); if (!b || b === a || cmd(a, b) || Math.abs(a.t - b.t) > 1) return; /* tambahan manual tetap mengikuti urutan jabatan (paling jauh satu tingkat) */ if (!R.get(a.p.id).kor.has(k)) R.get(a.p.id).kor.set(k, 'Koordinasi tambahan'); if (!R.get(k).kor.has(a.p.id)) R.get(k).kor.set(a.p.id, 'Koordinasi tambahan'); }));
+    const pos = new Map(order.map((p, i) => [p.id, i]));
+    R.forEach(r => { r.kor = new Map([...r.kor].sort((x, y) => pos.get(x[0]) - pos.get(y[0]))); });
+    return R;
+  });
+}
+const orgRelOf = id => orgRel().get(id) || { t: 0, up: '', down: [], kor: new Map() };
+const orgKorNames = id => [...orgRelOf(id).kor.keys()].map(x => (orgFind(x) || {}).jabatan).filter(Boolean);
+const orgAutoKor = id => [...orgRelOf(id).kor].filter(([, w]) => w !== 'Koordinasi tambahan');
+function orgKorHtml(id, cls) {
+  const r = orgRelOf(id);
+  if (!r.kor.size) return '<span class="muted">Tidak ada koordinasi selain garis komando</span>';
+  return '<span class="okchips">' + [...r.kor].map(([k, w]) => { const q = orgFind(k); return q ? '<button type="button" class="okchip' + (w === 'Koordinasi tambahan' ? ' man' : '') + (cls || '') + '" data-osel="' + esc(k) + '" title="' + esc(w) + '">' + esc(q.jabatan) + '<small>' + esc(w) + '</small></button>' : ''; }).join('') + '</span>';
+}
+
 MODS.org = {
   title: 'Struktur Organisasi', icon: 'org', desc: 'Bagan jabatan ' + BC + ', garis komando & koordinasi, dan nama personil',
   render(root) {
@@ -58,11 +146,36 @@ MODS.org = {
       filter: s => s.tab === 'bagan' ? '' : periodBar(Object.assign({}, s, { month: undefined })),
       body: s => editBadge('Struktur Organisasi') + orgHtml(s),
       bind: (el) => {
-        $$('[data-oid]', el).forEach(n => {
-          n.onclick = () => orgForm(orgFind(n.dataset.oid));
-          n.onmouseenter = () => { const p = orgFind(n.dataset.oid); if (!p) return; const rel = new Set(p.kor || []); orgPos().forEach(q => { if ((q.kor || []).includes(p.id)) rel.add(q.id); }); $$('[data-oid]', el).forEach(x => x.classList.toggle('kor', rel.has(x.dataset.oid))); n.classList.add('focus'); };
-          n.onmouseleave = () => $$('[data-oid]', el).forEach(x => x.classList.remove('kor', 'focus'));
+        const nodes = $$('[data-oid]', el), oc0 = $('.orgc', el), oi = $('[data-oinfo]', el), sst = stateOf('org', {});
+        const hov = () => matchMedia('(hover: hover)').matches;
+        // sorot: kuning = harus berkoordinasi, biru = atasan langsung, garis putus = bawahan langsung; jabatan lain diredupkan
+        const mark = id => {
+          const r = id && orgFind(id) ? orgRelOf(id) : null;
+          if (oc0) oc0.classList.toggle('osel-on', !!r);
+          nodes.forEach(x => {
+            const k = x.dataset.oid, w = r && r.kor.get(k);
+            x.classList.toggle('kor', !!w); x.classList.toggle('focus', !!r && k === id); x.classList.toggle('oup', !!r && r.up === k); x.classList.toggle('odn', !!r && r.down.includes(k));
+            x.dataset.tag = !r ? '' : k === id ? 'Dipilih' : w ? 'Koordinasi' : r.up === k ? 'Atasan' : r.down.includes(k) ? 'Bawahan' : '';
+            if (w) x.title = 'Koordinasi: ' + w; else x.removeAttribute('title');
+          });
+        };
+        const show = (id, scroll) => {
+          sst.sel = id && orgFind(id) ? id : ''; mark(sst.sel);
+          if (oi) { oi.innerHTML = orgInfoHtml(sst.sel); bindInfo(); }
+          if (scroll && sst.sel) { const n = nodes.find(x => x.dataset.oid === sst.sel); if (n) n.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' }); }
+        };
+        const bindInfo = () => {
+          $$('[data-osel]', oi).forEach(b => b.onclick = e => { e.stopPropagation(); show(b.dataset.osel, true); });
+          const ed = $('[data-oedit]', oi); if (ed) ed.onclick = () => orgForm(orgFind(sst.sel));
+          const cl = $('[data-oclose]', oi); if (cl) cl.onclick = () => show('');
+        };
+        nodes.forEach(n => {
+          n.onclick = e => { e.stopPropagation(); const id = n.dataset.oid; if (sst.sel === id) orgForm(orgFind(id)); else show(id); };
+          n.onmouseenter = () => { if (hov()) mark(n.dataset.oid); };
+          n.onmouseleave = () => { if (hov()) mark(sst.sel); };
         });
+        if (oc0) oc0.onclick = e => { if (!e.target.closest('[data-oid]')) show(''); };
+        if (oi) show(sst.sel);
         $$('[data-row]', el).forEach(tr => tr.onclick = () => orgForm(orgFind(tr.dataset.row)));
         bindRelock(el);
         const oc = $('.orgc', el), ot = $('.otree', el);
@@ -84,7 +197,17 @@ function orgNode(p, list, cls) {
   return '<button class="onode ' + (cls || '') + (p.unit && p.unit !== 'Umum' ? ' un-' + p.unit : '') + '" data-oid="' + esc(p.id) + '">' +
     '<span class="ohead">' + (p.unit && p.unit !== 'Umum' ? unitChip(p.unit) : '') + '<b>' + esc(p.jabatan) + '</b></span>' +
     '<span class="onames">' + (names.length ? names.map(o => '<i>' + esc(o.nama) + '</i>').join('') : '<em>Belum diisi</em>') + '</span>' +
-    '<span class="ofoot"><small class="' + (f && names.length < f ? 't-warn' : 't-ok') + '">' + names.length + (f ? ' / ' + f : '') + ' personil</small>' + ((p.kor || []).length ? '<small class="okor">' + (p.kor || []).length + ' koordinasi</small>' : '') + '</span></button>';
+    '<span class="ofoot"><small class="' + (f && names.length < f ? 't-warn' : 't-ok') + '">' + names.length + (f ? ' / ' + f : '') + ' personil</small>' + (orgRelOf(p.id).kor.size ? '<small class="okor">' + orgRelOf(p.id).kor.size + ' koordinasi</small>' : '') + '</span></button>';
+}
+function orgInfoHtml(id) {
+  const p = id && orgFind(id);
+  if (!p) return '<div class="oi-hint">' + ic('help') + '<span>Klik atau ketuk kotak jabatan untuk melihat dengan siapa jabatan itu harus berkoordinasi. <b class="oi-k">Kuning</b> = koordinasi, <b class="oi-u">biru</b> = atasan langsung, garis putus = bawahan langsung. Klik kotak yang sama sekali lagi untuk mengisi nama atau mengubah jabatan.</span></div>';
+  const r = orgRelOf(id), up = orgFind(r.up);
+  return '<div class="oi-h"><b>' + esc(p.jabatan) + '</b><small>Tingkat ' + r.t + ' · ' + esc(ORG_TIER[r.t] || '') + (p.unit && p.unit !== 'Umum' ? ' · ' + esc(p.unit) : '') + '</small>' +
+    '<span class="oi-act"><button type="button" class="btn ghost sm" data-oedit>' + ic('edit') + 'Ubah / isi nama</button><button type="button" class="ibtn sm" data-oclose aria-label="Tutup">&times;</button></span></div>' +
+    '<div class="oi-r"><span>Atasan langsung</span><div>' + (up ? '<button type="button" class="okchip okup" data-osel="' + esc(up.id) + '">' + esc(up.jabatan) + '</button>' : '<span class="muted">Puncak struktur</span>') + '</div></div>' +
+    '<div class="oi-r"><span>Bawahan langsung</span><div>' + (r.down.length ? '<span class="okchips">' + r.down.map(k => '<button type="button" class="okchip okdn" data-osel="' + esc(k) + '">' + esc((orgFind(k) || {}).jabatan || '') + '</button>').join('') + '</span>' : '<span class="muted">Tidak ada</span>') + '</div></div>' +
+    '<div class="oi-r"><span>Berkoordinasi dengan (' + r.kor.size + ')</span><div>' + orgKorHtml(id) + '</div></div>';
 }
 function orgSub(list, id) {
   const kids = orgKids(list, id);
@@ -104,13 +227,14 @@ function orgHtml(s) {
     return k + '<section class="card">' + table([
       { t: 'Jabatan', f: p => '<span style="padding-left:' + (p.lv - 1) * 16 + 'px"><b>' + esc(p.jabatan) + '</b></span><small style="padding-left:' + (p.lv - 1) * 16 + 'px">Level ' + p.lv + '</small>', raw: true },
       { t: 'Unit', f: p => unitChip(p.unit || 'Umum'), raw: true }, { t: 'Atasan langsung', f: p => (orgFind(p.atasan) || {}).jabatan || '-' },
-      { t: 'Koordinasi dengan', f: p => (p.kor || []).map(x => (orgFind(x) || {}).jabatan).filter(Boolean).join(', ') || '-', cls: 'wrap' },
+      { t: 'Tingkat', f: p => orgRelOf(p.id).t + ' · ' + (ORG_TIER[orgRelOf(p.id).t] || '') },
+      { t: 'Koordinasi dengan', f: p => orgKorNames(p.id).join(', ') || '-', cls: 'wrap' },
       { t: 'Personil', f: p => (p.orang || []).filter(o => o.nama).map(o => esc(o.nama) + (o.wa ? ' <small>' + esc(waShow(o.wa)) + '</small>' : '')).join('') || '<span class="muted">Belum diisi</span>', raw: true, cls: 'wrap' },
       { t: 'Formasi', f: p => orgFill(p) + ' / ' + (+p.formasi || 0), num: true }
     ], fr, { click: true }) + '</section>';
   }
-  return k + '<div class="note">Garis tegas = garis komando (atasan langsung). Arahkan kursor ke kotak jabatan untuk menyorot jabatan yang berkoordinasi. Klik kotak untuk mengisi nama, mengubah jabatan, atau menambah bawahan. <button class="btn ghost sm" data-orgreset style="margin-left:6px">' + ic('refresh') + 'Kembalikan standar</button></div>' +
-    '<section class="card flush"><div class="ozoom"><button class="ibtn sm" data-oz="-" aria-label="Perkecil">&minus;</button><button class="btn ghost sm" data-oz="fit">Muat layar</button><button class="btn ghost sm" data-oz="1">100%</button><button class="ibtn sm" data-oz="+" aria-label="Perbesar">+</button></div><div class="orgc">' + roots.map(r => '<div class="otree"><div class="otop">' + orgNode(r, list, 'l1') + '</div>' +
+  return k + '<div class="note">Garis tegas = garis komando (atasan langsung). Hubungan koordinasi disusun otomatis menurut urutan jabatan: rekan setingkat, satu unit, fungsi yang sama, dan fungsi pendukung. Arahkan kursor atau ketuk kotak jabatan untuk menyorot (kuning) jabatan yang harus diajak berkoordinasi. <button class="btn ghost sm" data-orgreset style="margin-left:6px">' + ic('refresh') + 'Kembalikan standar</button></div>' +
+    '<section class="card flush"><div class="oinfo" data-oinfo></div><div class="ozoom"><button class="ibtn sm" data-oz="-" aria-label="Perkecil">&minus;</button><button class="btn ghost sm" data-oz="fit">Muat layar</button><button class="btn ghost sm" data-oz="1">100%</button><button class="ibtn sm" data-oz="+" aria-label="Perbesar">+</button></div><div class="orgc">' + roots.map(r => '<div class="otree"><div class="otop">' + orgNode(r, list, 'l1') + '</div>' +
       (orgKids(list, r.id).length ? '<div class="ocols">' + orgKids(list, r.id).map(c => '<div class="ocol">' + orgNode(c, list, 'l2') + orgSub(list, c.id) + '</div>').join('') + '</div>' : '') + '</div>').join('') + '</div></section>' +
     '<div class="legend"><span><i style="background:var(--navy)"></i>Pimpinan</span><span><i style="background:#263445"></i>AMP</span><span><i style="background:#1f5fae"></i>CMP</span><span><i style="background:#8a5a2b"></i>SCP</span><span><i style="background:#24756b"></i>PCP</span><span><i style="background:#6a7686"></i>Umum / pendukung</span></div>';
 }
@@ -137,7 +261,8 @@ function orgFormRaw(p, pre) {
         { k: 'nama', label: 'Nama lengkap', type: 'list', opts: () => mpList.map(m => m.nama), w: '46%', onChange: r => { const m = mpList.find(x => x.nama === r.nama); if (m && !r.wa) r.wa = m.wa ? '0' + String(m.wa).replace(/^62/, '') : ''; } },
         { k: 'wa', label: 'No. WhatsApp' }, { k: 'ket', label: 'Keterangan', w: '22%' }] },
       { k: 'addMp', type: 'check', text: 'Tambahkan nama baru ke Kartu Man Power (jabatan dan unit mengikuti posisi ini)' },
-      { k: 'kor', label: 'Berkoordinasi dengan (garis koordinasi)', type: 'checks', opts: () => list.filter(x => x.id !== v.id).map(x => ({ v: x.id, t: x.jabatan })) },
+      { k: 'korAuto', label: 'Koordinasi otomatis (sesuai urutan jabatan)', type: 'html', full: true, html: () => isNew ? '<span class="muted">Disusun otomatis setelah posisi disimpan, mengikuti tingkat jabatan, unit, dan fungsinya.</span>' : orgAutoKor(v.id).length ? '<span class="okchips">' + orgAutoKor(v.id).map(([k, w]) => '<span class="okchip">' + esc((orgFind(k) || {}).jabatan || '') + '<small>' + esc(w) + '</small></span>').join('') + '</span>' : '<span class="muted">Tidak ada koordinasi otomatis selain garis komando</span>' },
+      { k: 'kor', label: 'Koordinasi tambahan (di luar susunan otomatis, paling jauh satu tingkat jabatan)', type: 'checks', opts: () => { const au = new Set(isNew ? [] : orgAutoKor(v.id).map(x => x[0])), t0 = isNew ? 0 : orgRelOf(v.id).t; return list.filter(x => x.id !== v.id && x.id !== v.atasan && x.atasan !== v.id && !au.has(x.id) && (!t0 || Math.abs(orgRelOf(x.id).t - t0) <= 1)).map(x => ({ v: x.id, t: x.jabatan })); } },
       { k: 'tugas', label: 'Uraian tugas & tanggung jawab', type: 'textarea', rows: 3 }
     ],
     onSave: x => {
@@ -203,7 +328,7 @@ async function orgReport() {
   doc.addPage(); R.y = 36;
   R.h2('Daftar Jabatan, Garis Komando, Koordinasi & Personil');
   const rows = []; const walk = (id, lv) => orgKids(list, id).forEach(p => { rows.push([lv, p]); walk(p.id, lv + 1); }); walk('', 1);
-  R.table(['No', 'Jabatan', 'Unit', 'Atasan Langsung', 'Koordinasi', 'Formasi', 'Nama Personil', 'Uraian Tugas'], rows.map(([lv, p], i) => [i + 1, '  '.repeat(lv - 1) + p.jabatan, p.unit || 'Umum', (orgFind(p.atasan) || {}).jabatan || '-', (p.kor || []).map(x => (orgFind(x) || {}).jabatan).filter(Boolean).join(', ') || '-', cellR(orgFill(p) + '/' + (+p.formasi || 0)), (p.orang || []).filter(o => o.nama).map(o => o.nama + (o.wa ? ' (' + waShow(o.wa) + ')' : '')).join('\n') || '-', p.tugas || '-']),
+  R.table(['No', 'Jabatan', 'Unit', 'Atasan Langsung', 'Koordinasi', 'Formasi', 'Nama Personil', 'Uraian Tugas'], rows.map(([lv, p], i) => [i + 1, '  '.repeat(lv - 1) + p.jabatan, p.unit || 'Umum', (orgFind(p.atasan) || {}).jabatan || '-', orgKorNames(p.id).join(', ') || '-', cellR(orgFill(p) + '/' + (+p.formasi || 0)), (p.orang || []).filter(o => o.nama).map(o => o.nama + (o.wa ? ' (' + waShow(o.wa) + ')' : '')).join('\n') || '-', p.tugas || '-']),
     { fs: 6.8, cs: { 0: { halign: 'center', cellWidth: 8 }, 1: { cellWidth: 42 }, 3: { cellWidth: 34 }, 4: { cellWidth: 44 }, 6: { cellWidth: 40 }, 7: { cellWidth: 52 } } });
   R.sign([['Dibuat oleh,', S.user.name], ['Kepala Plant,', ''], ['Disetujui oleh,', '']]);
   await R.save();
