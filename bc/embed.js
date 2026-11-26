@@ -100,13 +100,14 @@
     const r = APP.route, mod = MODS[r];
     const bcs = R0.bcs; let html;
     const head = '<div class="phead"><div class="ptitle"><span class="ptile">' + ic(mod ? mod.icon : 'home') + '</span><div><h1>' + esc(mod ? mod.title : 'Rekap Semua Basecamp') + '</h1><p>' +
-      esc(mod ? 'Ringkasan kartu ini di setiap basecamp. Pilih basecamp untuk membuka dan mengisi data.' : 'Ringkasan operasional seluruh basecamp PT. Armada Hada Graha — unit AMP, CMP, SCP, dan PCP.') + '</p></div></div>' +
-      '<div class="pact"><button class="btn ghost" data-rf>' + ic('refresh') + '<span>Muat ulang</span></button>' + (r === 'perf' ? '<button class="btn dark" data-pfpdf>' + ic('print') + '<span>Cetak PDF</span></button>' : r === 'jual' ? '<button class="btn dark" data-jxpdf>' + ic('print') + '<span>Cetak PDF</span></button>' : mod ? '' : '<button class="btn dark" data-pdf>' + ic('print') + '<span>Cetak PDF</span></button>') + '</div></div>';
+      esc(r === 'kas' ? 'Cash flow seluruh basecamp: rincian uang masuk, uang keluar, piutang, dan hutang tiap basecamp dengan grand total.' : mod ? 'Ringkasan kartu ini di setiap basecamp. Pilih basecamp untuk membuka dan mengisi data.' : 'Ringkasan operasional seluruh basecamp PT. Armada Hada Graha — unit AMP, CMP, SCP, dan PCP.') + '</p></div></div>' +
+      '<div class="pact"><button class="btn ghost" data-rf>' + ic('refresh') + '<span>Muat ulang</span></button>' + (r === 'perf' ? '<button class="btn dark" data-pfpdf>' + ic('print') + '<span>Cetak PDF</span></button>' : r === 'kas' ? '<button class="btn dark" data-kapdf>' + ic('print') + '<span>Cetak PDF</span></button>' : r === 'jual' ? '<button class="btn dark" data-jxpdf>' + ic('print') + '<span>Cetak PDF</span></button>' : mod ? '' : '<button class="btn dark" data-pdf>' + ic('print') + '<span>Cetak PDF</span></button>') + '</div></div>';
     if (!bcs.length) { html = head + '<div class="empty">' + ic('home') + '<p>Belum ada basecamp.</p></div>'; put(main, html); return; }
     if (r === 'flow') { if (main._h !== 'flow' || !APP.ctl) { main._h = 'flow'; main._f = 1; APP.ctl = MODS.flow.render(main); } return; }
     if (main._f) { main._f = 0; main._h = ''; APP.ctl = null; }
     if (r === 'perf') { pfAllMount(main, head, bcs, R0.data); const rf = $('[data-rf]', main); if (rf) rf.onclick = () => loadAll(true); return; }
     if (r === 'jual' && typeof jxAllHtml === 'function') { jualAll(main, head); return; }
+    if (r === 'kas') { kasAll(main, head); return; }
     if (mod) {
       html = head + (R0.err ? '<div class="note">' + esc(R0.err) + '</div>' : '') + '<div class="cards">' + bcs.map((bc, i) => {
         const s = sumOf(bc, r) || {};
@@ -171,6 +172,138 @@
     $$('tr[data-jxgo]', res).forEach(tr => tr.onclick = () => { const [p, ref] = tr.dataset.jxgo.split(':'); JA.per = p; JA.ref = ref; jaFilter(main); jaFill(main, true); window.scrollTo(0, 0); });
     $$('tr[data-jx]', res).forEach(tr => tr.onclick = e => { e.stopPropagation(); const bc = tr.closest('section') && tr.closest('section').querySelector('.bcbadge'); const name = bc ? bc.textContent : ''; if (name && R0.data[name]) withDocs(R0.data[name], () => jxDetail(tr.dataset.jx)); });
     if (!force) window.scrollTo(0, sy);
+  }
+  /* Cash Flow semua basecamp: rincian arus kas tiap basecamp + grand total (catatan kas aplikasi + uang masuk penjualan rekap sheet) */
+  const KA = stateOf('kasAll', { per: '', ref: '', q: '', more: {} });
+  if (!KA.more) KA.more = {};
+  const hasJx = () => typeof jxSel === 'function';
+  function kasBcData(s) {
+    const r = jxRange(s), inR = t => r.per === 'semua' || (!!t && t >= r.a && t <= r.b);
+    const ks = all('kas').filter(k => qMatch(s.q, k.kat, k.ket, k.pihak, k.metode));
+    const kr = ks.filter(k => inR(k.tgl)), sg = k => k.arah === 'masuk' ? +k.jumlah || 0 : -(+k.jumlah || 0);
+    const kasIn = sum(kr.filter(k => k.arah === 'masuk'), 'jumlah'), kasOut = sum(kr.filter(k => k.arah === 'keluar'), 'jumlah');
+    const awal = r.per === 'semua' ? 0 : sum(ks.filter(k => k.tgl && k.tgl < r.a), sg), akhir = sum(ks.filter(k => r.per === 'semua' || !k.tgl || k.tgl <= r.b), sg);
+    const kat = Object.entries(groupBy(kr, k => k.arah + '|' + (k.kat || 'Lain-lain'))).map(([k, a]) => ({ arah: k.split('|')[0], kat: k.split('|')[1], src: 'Catatan kas', n: a.length, jml: sum(a, 'jumlah') }));
+    const tx = kr.map(k => ({ tgl: k.tgl, src: 'Kas', arah: k.arah, uraian: k.ket || k.kat, sub: k.kat + (k.metode ? ' · ' + k.metode : ''), pihak: k.pihak || (k.inv ? custName((get(k.inv) || {}).cust) : ''), jml: +k.jumlah || 0 }));
+    let pjIn = 0, pjEks = 0, pjInt = 0, tagihInt = 0, piutInt = 0, piutEks = 0, nilai = 0;
+    if (hasJx()) {
+      const x = jxSel({ per: s.per, ref: s.ref, q: s.q });
+      const eks = d => d.kat === 'Eksternal';
+      pjIn = x.masuk; pjEks = sum(x.rows.filter(eks), 'masuk') + sum(x.tg.filter(eks), 'masuk'); pjInt = pjIn - pjEks;
+      tagihInt = sum(x.rows.filter(d => d.kat === 'Internal'), jxNilaiJual); nilai = x.nilai;
+      const a0 = jxTot(jxAll()); piutInt = a0.piutInt; piutEks = a0.piutEks;
+      if (pjEks) kat.push({ arah: 'masuk', kat: 'Penjualan eksternal / retail', src: 'Rekap sheet', n: x.rows.filter(d => eks(d) && +d.masuk).length + x.tg.filter(d => eks(d) && +d.masuk).length, jml: pjEks });
+      if (pjInt) kat.push({ arah: 'masuk', kat: 'Penjualan internal diterima (HO / proyek)', src: 'Rekap sheet', n: x.rows.filter(d => !eks(d) && +d.masuk).length + x.tg.filter(d => !eks(d) && +d.masuk).length, jml: pjInt });
+      x.rows.concat(x.tg).filter(d => +d.masuk > 0.5).forEach(d => tx.push({ tgl: jxDate(d), src: 'Rekap sheet', arah: 'masuk', uraian: d.nama || d.produk || 'Penjualan', sub: [d.kat, d.unit, d.produk, d.sph ? 'SPH ' + d.sph : '', d.so || d.inv].filter(Boolean).join(' · '), pihak: d.kat === 'Internal' ? 'PT. AHG' : '', jml: +d.masuk || 0, jx: d.id }));
+    }
+    kat.sort((a, b) => b.arah.localeCompare(a.arah) || b.jml - a.jml);
+    tx.sort((a, b) => String(b.tgl).localeCompare(String(a.tgl)));
+    const kt = kasTotals(), masuk = kasIn + pjIn;
+    const buckets = (jxBuckets(r) || [...new Set(tx.map(d => String(d.tgl || '').slice(0, 7)).filter(Boolean))].sort().map(ym => ({ k: ym, a: ym + '-01', b: ym + '-31', label: monthLabel(ym), go: 'bulan:' + ym + '-01' })))
+      .map(b => { const in_ = tx.filter(d => d.tgl >= b.a && d.tgl <= b.b); return Object.assign({ masuk: sum(in_.filter(d => d.arah === 'masuk'), 'jml'), keluar: sum(in_.filter(d => d.arah === 'keluar'), 'jml') }, b); });
+    return { r, kasIn, kasOut, pjIn, pjEks, pjInt, tagihInt, nilai, masuk, keluar: kasOut, net: masuk - kasOut, awal, akhir, piutInv: kt.piutang, piutInt, piutEks, piutang: kt.piutang + piutInt + piutEks, hutang: kt.hutang, telat: kt.telat, belumTagih: kt.belumTagih, kat, tx, buckets };
+  }
+  const kaList = () => R0.bcs.map(bc => ({ bc, x: R0.data[bc] ? withDocs(R0.data[bc], () => kasBcData(KA)) : null }));
+  const bdg = bc => '<span class="bcbadge sm" style="--bct:' + bcTone(bc) + '">' + esc(bc) + '</span>';
+  const signRp = (v, z) => v ? '<b class="' + (v >= 0 ? 't-ok' : 't-bad') + '">' + rp(v) + '</b>' : (z || '-');
+  function kasAllHtml(list) {
+    const r = jxRange(KA), ok = list.filter(b => b.x), T = k => sum(ok, b => b.x[k]), totIn = T('masuk');
+    const sumT = '<section class="card"><div class="chead"><h3>Cash flow per basecamp</h3><div class="cmeta">' + esc(r.label) + (r.per !== 'semua' ? ' · ' + tgl(r.a) + ' – ' + tgl(r.b) : '') + '</div></div>' + table([
+      { t: 'Basecamp', f: b => bdg(b.bc), raw: true },
+      { t: 'Masuk penjualan', f: b => b.x ? rp(b.x.pjIn) + (b.x.pjIn ? '<small>eks ' + rpS(b.x.pjEks) + ' · int ' + rpS(b.x.pjInt) + '</small>' : '') : 'Memuat…', num: true, raw: true },
+      { t: 'Masuk kas lain', f: b => b.x ? rp(b.x.kasIn) : '', num: true },
+      { t: 'Total masuk', f: b => b.x ? '<b class="t-ok">' + rp(b.x.masuk) + '</b>' : '', num: true, raw: true },
+      { t: 'Uang keluar', f: b => b.x ? '<span class="' + (b.x.keluar ? 't-bad' : '') + '">' + rp(b.x.keluar) + '</span>' : '', num: true, raw: true },
+      { t: 'Arus bersih', f: b => b.x ? signRp(b.x.net, rp(0)) : '', num: true, raw: true },
+      { t: 'Saldo kas', f: b => b.x ? rp(b.x.akhir) : '', num: true },
+      { t: 'Piutang', f: b => b.x ? '<span class="' + (b.x.piutang > 0.5 ? 't-warn' : '') + '">' + rp(b.x.piutang) + '</span>' + (b.x.telat ? '<small class="t-bad">' + b.x.telat + ' lewat tempo</small>' : '') : '', num: true, raw: true },
+      { t: 'Hutang', f: b => b.x ? rp(b.x.hutang) : '', num: true },
+      { t: 'Kontribusi', f: b => b.x ? '<div class="mini"><b>' + pct(totIn ? b.x.masuk / totIn : 0) + '</b>' + bar(totIn ? b.x.masuk / totIn : 0, 'info') + '</div>' : '', raw: true },
+      { t: '', f: b => '<button class="btn sm" data-pick="' + esc(b.bc) + '">Buka' + ic('right') + '</button>', raw: true }
+    ], list.map((b, i) => Object.assign({ id: i }, b))).replace('</table>', '<tfoot><tr class="gt"><td class="tl">GRAND TOTAL</td><td class="n">' + rp(T('pjIn')) + '</td><td class="n">' + rp(T('kasIn')) + '</td><td class="n">' + rp(totIn) + '</td><td class="n">' + rp(T('keluar')) + '</td><td class="n">' + rp(T('net')) + '</td><td class="n">' + rp(T('akhir')) + '</td><td class="n">' + rp(T('piutang')) + '</td><td class="n">' + rp(T('hutang')) + '</td><td>100%</td><td></td></tr></tfoot></table>') + '</section>';
+    const piT = '<section class="card"><div class="chead"><h3>Posisi piutang &amp; hutang per basecamp</h3><div class="cmeta">posisi saat ini · semua periode</div></div>' + table([
+      { t: 'Basecamp', f: b => bdg(b.bc), raw: true }, { t: 'Piutang invoice', f: b => b.x ? rp(b.x.piutInv) : 'Memuat…', num: true }, { t: 'Piutang internal HO / proyek', f: b => b.x ? rp(b.x.piutInt) : '', num: true },
+      { t: 'Piutang eksternal', f: b => b.x ? rp(b.x.piutEks) : '', num: true }, { t: 'Total piutang', f: b => b.x ? '<b>' + rp(b.x.piutang) + '</b>' : '', num: true, raw: true },
+      { t: 'Belum ditagih', f: b => b.x ? rp(b.x.belumTagih) : '', num: true }, { t: 'Hutang supplier', f: b => b.x ? rp(b.x.hutang) : '', num: true }
+    ], list.map((b, i) => Object.assign({ id: 'p' + i }, b))).replace('</table>', '<tfoot><tr class="gt"><td class="tl">GRAND TOTAL</td><td class="n">' + rp(T('piutInv')) + '</td><td class="n">' + rp(T('piutInt')) + '</td><td class="n">' + rp(T('piutEks')) + '</td><td class="n">' + rp(T('piutang')) + '</td><td class="n">' + rp(T('belumTagih')) + '</td><td class="n">' + rp(T('hutang')) + '</td></tr></tfoot></table>') + '</section>';
+    let bk = ok.length ? ok[0].x.buckets.map((b, i) => Object.assign({}, b, { per: ok.map(o => o.x.buckets[i] || { masuk: 0, keluar: 0 }) })) : [];
+    if (r.per === 'semua') { const ms = [...new Set(ok.flatMap(o => o.x.buckets.map(b => b.k)))].sort(); bk = ms.map(k => ({ k, label: monthLabel(k), go: 'bulan:' + k + '-01', per: ok.map(o => o.x.buckets.find(b => b.k === k) || { masuk: 0, keluar: 0 }) })); }
+    const cell = p => p.masuk || p.keluar ? (p.masuk ? rp(p.masuk) : '') + (p.keluar ? '<small class="t-bad">− ' + rp(p.keluar) + '</small>' : '') : '-';
+    const perT = bk.length ? '<section class="card"><div class="chead"><h3>' + (r.per === 'minggu' ? 'Arus kas per hari' : r.per === 'bulan' ? 'Arus kas per minggu' : 'Arus kas per bulan') + ' per basecamp</h3><div class="cmeta">uang masuk (merah = keluar)' + (r.per !== 'minggu' ? ' · klik baris untuk rinciannya' : '') + '</div></div><div class="tbl"><table><thead><tr><th>' + (r.per === 'minggu' ? 'Hari' : r.per === 'bulan' ? 'Minggu' : 'Bulan') + '</th>' +
+      ok.map(o => '<th class="n">' + esc(o.bc) + '</th>').join('') + '<th class="n">Total masuk</th><th class="n">Total keluar</th><th class="n">Arus bersih</th></tr></thead><tbody>' +
+      bk.map(b => { const mi = sum(b.per, 'masuk'), ko = sum(b.per, 'keluar'); return '<tr' + (b.go ? ' class="click" data-kago="' + esc(b.go) + '"' : '') + '><td><b>' + esc(b.label) + '</b></td>' + b.per.map(p => '<td class="n">' + cell(p) + '</td>').join('') + '<td class="n"><b>' + rp(mi) + '</b></td><td class="n">' + rp(ko) + '</td><td class="n">' + signRp(mi - ko, rp(0)) + '</td></tr>'; }).join('') +
+      '</tbody><tfoot><tr class="gt"><td class="tl">GRAND TOTAL</td>' + ok.map(o => '<td class="n">' + rp(o.x.masuk) + (o.x.keluar ? '<small>− ' + rp(o.x.keluar) + '</small>' : '') + '</td>').join('') + '<td class="n">' + rp(totIn) + '</td><td class="n">' + rp(T('keluar')) + '</td><td class="n">' + rp(T('net')) + '</td></tr></tfoot></table></div></section>' : '';
+    const MAX = 25;
+    const lists = list.map(b => {
+      if (!b.x) return '<section class="card"><div class="chead"><h3 class="bcx-h">' + bdg(b.bc) + ' Cash flow</h3></div><div class="empty"><p>Memuat data…</p></div></section>';
+      const x = b.x, more = !!KA.more[b.bc], rows = more ? x.tx : x.tx.slice(0, MAX);
+      const kin = x.kat.filter(k => k.arah === 'masuk'), kout = x.kat.filter(k => k.arah === 'keluar');
+      const katT = table([{ t: 'Arah', f: k => chip(k.arah === 'masuk' ? 'Masuk' : 'Keluar', k.arah === 'masuk' ? 'ok' : 'bad'), raw: true }, { t: 'Kategori', f: k => '<b>' + esc(k.kat) + '</b><small>' + esc(k.src) + '</small>', raw: true }, { t: 'Transaksi', f: k => num(k.n), num: true }, { t: 'Jumlah', f: k => rp(k.jml), num: true }],
+        x.kat.map((k, i) => Object.assign({ id: 'k' + i }, k)), { empty: 'Belum ada arus kas pada ' + x.r.label + '.' })
+        .replace('</table>', x.kat.length ? '<tfoot><tr><td class="tl" colspan="3">Total masuk</td><td class="n t-ok">' + rp(sum(kin, 'jml')) + '</td></tr><tr><td class="tl" colspan="3">Total keluar</td><td class="n t-bad">' + rp(sum(kout, 'jml')) + '</td></tr><tr class="gt"><td class="tl" colspan="3">Arus bersih ' + esc(b.bc) + '</td><td class="n">' + rp(x.net) + '</td></tr></tfoot></table>' : '</table>');
+      const txT = table([{ t: 'Tanggal', f: d => tgl(d.tgl) }, { t: 'Sumber', f: d => chip(d.src, d.src === 'Kas' ? '' : 'info'), raw: true }, { t: 'Uraian', f: d => '<b>' + esc(d.uraian || '-') + '</b><small>' + esc(d.sub || '') + '</small>', raw: true, cls: 'wrap' },
+        { t: 'Pihak', f: d => d.pihak || '-' }, { t: 'Masuk', f: d => d.arah === 'masuk' ? '<b class="t-ok">' + rp(d.jml) + '</b>' : '', num: true, raw: true }, { t: 'Keluar', f: d => d.arah === 'keluar' ? '<b class="t-bad">' + rp(d.jml) + '</b>' : '', num: true, raw: true }],
+        rows.map((d, i) => Object.assign({ id: 't' + i }, d)), { click: true, empty: 'Belum ada transaksi pada ' + x.r.label + '.', rowAttr: d => d.jx ? 'data-kajx="' + esc(d.jx) + '"' : '' })
+        .replace('</table>', rows.length ? '<tfoot><tr><td class="tl" colspan="4">Subtotal ' + esc(b.bc) + (rows.length < x.tx.length ? ' (semua ' + num(x.tx.length) + ' transaksi)' : '') + '</td><td class="n">' + rp(x.masuk) + '</td><td class="n">' + rp(x.keluar) + '</td></tr></tfoot></table>' : '</table>');
+      return '<section class="card"><div class="chead"><h3 class="bcx-h">' + bdg(b.bc) + ' Rincian cash flow</h3><div class="cmeta">masuk ' + rpS(x.masuk) + ' · keluar ' + rpS(x.keluar) + ' · bersih ' + rpS(x.net) + (x.r.per !== 'semua' ? ' · saldo kas awal ' + rpS(x.awal) + ' → akhir ' + rpS(x.akhir) : '') + '</div></div>' +
+        '<div class="kab"><h4 class="kah">Arus kas per kategori</h4>' + katT + '</div><div class="kab"><h4 class="kah">Transaksi ' + (more || x.tx.length <= MAX ? '' : 'terbaru ') + esc(x.r.label) + '</h4>' + txT +
+        (x.tx.length > MAX ? '<div class="cfoot"><button class="btn ghost sm" data-kamore="' + esc(b.bc) + '">' + (more ? 'Ringkas (' + MAX + ' terbaru)' : 'Tampilkan semua ' + num(x.tx.length) + ' transaksi') + '</button></div>' : '') + '</div>' +
+        '<div class="cfoot"><button class="btn ghost sm" data-pick="' + esc(b.bc) + '">Buka kartu Cash Flow ' + esc(b.bc) + ic('right') + '</button></div></section>';
+    }).join('');
+    return '<div class="kpis">' + kpi('Grand total uang masuk', rpS(totIn), esc(r.label) + ' · ' + ok.length + ' basecamp', 'good') + kpi('Uang keluar', rpS(T('keluar')), 'catatan kas semua basecamp', T('keluar') ? 'bad' : '') +
+      kpi('Arus bersih', rpS(T('net')), 'masuk − keluar', T('net') >= 0 ? 'good' : 'bad') + kpi('Saldo kas', rpS(T('akhir')), 'akumulasi catatan kas' + (r.per !== 'semua' ? ' s/d ' + tgl(r.b) : '')) + '</div>' +
+      '<div class="kpis">' + kpi('Piutang semua basecamp', rpS(T('piutang')), 'invoice + internal + eksternal', T('piutang') > 0.5 ? 'warn' : '') + kpi('Penjualan internal ditagihkan', rpS(T('tagihInt')), esc(r.label)) +
+      kpi('Hutang supplier', rpS(T('hutang')), 'belum dibayar', T('hutang') ? 'warn' : '') + kpi('Lewat jatuh tempo', T('telat'), 'invoice & hutang', T('telat') ? 'bad' : '') + '</div>' +
+      sumT + perT + piT + '<div class="sech"><h2>Rincian cash flow per basecamp</h2><p>Uang masuk penjualan dari rekap sheet (retail &amp; internal) ditambah catatan Uang Masuk / Uang Keluar di kartu Cash Flow tiap basecamp pada ' + esc(r.label) + '.</p></div>' + lists;
+  }
+  function kasAll(main, head) {
+    if (main._h !== 'kasall' || !$('.kaall', main)) {
+      main._h = 'kasall'; main._f = 0;
+      main.innerHTML = head + '<div class="kaall"><div class="pfilter"></div><div class="pres"></div></div>';
+      const rf = $('[data-rf]', main); if (rf) rf.onclick = () => loadAll(true);
+      const pd = $('[data-kapdf]', main); if (pd) pd.onclick = () => runReport(() => kasAllReport(kaList()));
+      kaFilter(main);
+    }
+    kaFill(main);
+  }
+  function kaFilter(main) {
+    const f = $('.kaall .pfilter', main);
+    f.innerHTML = jxPerBar(KA, '');
+    const sb = $('.sbox input', f); if (sb) sb.placeholder = 'Cari uraian, kategori, customer…';
+    jxPerBind(f, KA, () => { kaFilter(main); kaFill(main, true); });
+    $$('[data-fk]', f).forEach(el => el.addEventListener('input', debounce(() => { KA[el.dataset.fk] = el.value; kaFill(main, true); }, 180)));
+  }
+  function kaFill(main, force) {
+    const res = $('.kaall .pres', main); if (!res) return;
+    const html = (R0.err ? '<div class="note">' + esc(R0.err) + '</div>' : '') + kasAllHtml(kaList()) + (R0.busy ? '<div class="note">Memuat data basecamp lainnya…</div>' : '');
+    if (!force && res._h === html) return;
+    const sy = window.scrollY;
+    res._h = html; res.innerHTML = html;
+    $$('[data-pick]', res).forEach(b => b.onclick = e => { e.preventDefault(); pick(b.dataset.pick, 'kas'); });
+    $$('[data-kamore]', res).forEach(b => b.onclick = () => { KA.more[b.dataset.kamore] = !KA.more[b.dataset.kamore]; kaFill(main, true); });
+    $$('tr[data-kago]', res).forEach(tr => tr.onclick = () => { const [p, ref] = tr.dataset.kago.split(':'); KA.per = p; KA.ref = ref; jxSyncMonth(KA); kaFilter(main); kaFill(main, true); window.scrollTo(0, 0); });
+    $$('tr[data-kajx]', res).forEach(tr => tr.onclick = e => { e.stopPropagation(); const s = tr.closest('section'), bc = s && s.querySelector('.bcbadge'), name = bc ? bc.textContent : ''; if (name && R0.data[name] && typeof jxDetail === 'function') withDocs(R0.data[name], () => jxDetail(tr.dataset.kajx)); });
+    if (!force) window.scrollTo(0, sy);
+  }
+  async function kasAllReport(list) {
+    const r = jxRange(KA), ok = list.filter(b => b.x), T = k => sum(ok, b => b.x[k]);
+    const R = await pdfReport({ title: 'Rekap Cash Flow Semua Basecamp', sub: 'PT. Armada Hada Graha · ' + r.label + (r.per !== 'semua' ? ' (' + tgl(r.a) + ' – ' + tgl(r.b) + ')' : '') + ' · per ' + tgl(today(), true), orient: 'l', fname: 'Cash_Flow_Semua_Basecamp_' + r.label.replace(/[^A-Za-z0-9]+/g, '_') });
+    R.kv([['Grand total uang masuk', 'Rp ' + R_(T('masuk'))], ['Uang keluar', 'Rp ' + R_(T('keluar'))], ['Arus bersih', 'Rp ' + R_(T('net')), T('net') < 0 ? 'red' : ''], ['Total piutang', 'Rp ' + R_(T('piutang')), T('piutang') > 0.5 ? 'red' : '']], 4);
+    R.h2('Cash flow per basecamp', r.label);
+    R.table(['Basecamp', 'Masuk Penjualan', 'Masuk Kas Lain', 'Total Masuk', 'Uang Keluar', 'Arus Bersih', 'Saldo Kas', 'Piutang', 'Hutang', 'Kontribusi'],
+      ok.map(b => [b.bc, cellR(R_(b.x.pjIn)), cellR(R_(b.x.kasIn)), cellR(R_(b.x.masuk)), cellR(R_(b.x.keluar)), cellR(R_(b.x.net)), cellR(R_(b.x.akhir)), cellR(R_(b.x.piutang)), cellR(R_(b.x.hutang)), cellR(pct(T('masuk') ? b.x.masuk / T('masuk') : 0))]),
+      { foot: ['GRAND TOTAL', cellR(R_(T('pjIn'))), cellR(R_(T('kasIn'))), cellR(R_(T('masuk'))), cellR(R_(T('keluar'))), cellR(R_(T('net'))), cellR(R_(T('akhir'))), cellR(R_(T('piutang'))), cellR(R_(T('hutang'))), cellR('100%')] });
+    R.h2('Posisi piutang & hutang per basecamp', 'posisi saat ini');
+    R.table(['Basecamp', 'Piutang Invoice', 'Piutang Internal', 'Piutang Eksternal', 'Total Piutang', 'Belum Ditagih', 'Hutang Supplier'],
+      ok.map(b => [b.bc, cellR(R_(b.x.piutInv)), cellR(R_(b.x.piutInt)), cellR(R_(b.x.piutEks)), cellR(R_(b.x.piutang)), cellR(R_(b.x.belumTagih)), cellR(R_(b.x.hutang))]),
+      { foot: ['GRAND TOTAL', cellR(R_(T('piutInv'))), cellR(R_(T('piutInt'))), cellR(R_(T('piutEks'))), cellR(R_(T('piutang'))), cellR(R_(T('belumTagih'))), cellR(R_(T('hutang')))] });
+    ok.forEach(b => {
+      R.h2('Rincian ' + b.bc, 'masuk Rp ' + R_(b.x.masuk) + ' · keluar Rp ' + R_(b.x.keluar));
+      R.table(['Arah', 'Kategori', 'Sumber', 'Transaksi', 'Jumlah'], b.x.kat.map(k => [k.arah === 'masuk' ? 'Masuk' : 'Keluar', k.kat, k.src, cellR(N_(k.n)), cellR(R_(k.jml))]),
+        { foot: ['', 'Arus bersih ' + b.bc, '', '', cellR(R_(b.x.net))] });
+    });
+    R.sign([['Dibuat oleh', S.user.name], ['Finance', ''], ['Manager Unit', '']]);
+    await R.save();
   }
   // gambar ulang hanya bila isi berubah (tanpa animasi berulang / posisi gulir melompat saat data basecamp masuk)
   function put(main, html) { if (main._h === html && main.firstChild) return; main._h = html; main.innerHTML = html; bind(main); }
