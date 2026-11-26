@@ -649,3 +649,12 @@ span.okchip { cursor: default; }
 .rkat th.rkytd { color: var(--navy); }
 .rkat td small { display: block; font-size: 11px; color: var(--muted); }
 .items input[data-ik="m0"], .items input[data-ik="m1"], .items input[data-ik="m2"], .items input[data-ik="m3"], .items input[data-ik="m4"], .items input[data-ik="m5"], .items input[data-ik="m6"], .items input[data-ik="m7"], .items input[data-ik="m8"], .items input[data-ik="m9"], .items input[data-ik="m10"], .items input[data-ik="m11"] { min-width: 112px; }
+/* Pengembangan Basecamp: time schedule */
+.gantt th.gw { text-align: center; font-size: 11px; font-weight: 700; color: var(--navy); border-left: 1px solid #dfe5ec; background: var(--surface2); }
+.devts td.gd { background: #6f8fb8; }
+.devts td.strong small { display: block; font-weight: 400; color: var(--muted); font-size: 11px; margin-top: 2px; }
+details.devrab { margin-top: 12px; }
+details.devrab > summary { cursor: pointer; font-weight: 600; color: var(--navy); padding: 6px 0; }
+details.devrab > .tbl { margin-top: 6px; }
+.devts td.strong { min-width: 300px; }
+.devts th.gh, .devts td.gd, .devts td.g0, .devts td.gp { width: 31px; min-width: 31px; }

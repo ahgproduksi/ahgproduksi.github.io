@@ -158,6 +158,68 @@ async function mktReport(s) {
 /* =================== 12. PENGEMBANG =================== */
 const DEV_ST = ['Usulan', 'Disetujui', 'Berjalan', 'Selesai', 'Ditunda'];
 const DEV_IDE = ['Kanopi atap stockpile material', 'Ruang penampungan limbah sementara (TPS B3)', 'Instalasi Pengolahan Air Limbah (IPAL)', 'Saluran drainase basecamp', 'Jembatan timbang', 'Gudang material & sparepart', 'Perkerasan jalan internal basecamp', 'Mess karyawan', 'Pagar keliling basecamp', 'Penyiraman debu (water sprinkler) area SCP', 'Instalasi CCTV basecamp', 'Bak pengendap air cucian truck mixer', 'Laboratorium uji material', 'Kantor & ruang rapat basecamp'];
+/* hari kerja = Senin–Sabtu; Minggu dan libur nasional bertanggal tetap tidak dihitung */
+const DEV_LIBUR = ['01-01', '05-01', '06-01', '08-17', '12-25'];
+const devLibur = s => new Date(s + 'T00:00:00').getDay() === 0 || DEV_LIBUR.includes(s.slice(5));
+function devHari(r, n) { // tanggal hari ke-n (hari ke-1 = rencana mulai)
+  if (!r.mulai || !(n > 0)) return '';
+  if (!r.hk) return addDays(r.mulai, n - 1);
+  let d = r.mulai, g = 0;
+  while (devLibur(d) && g++ < 30) d = addDays(d, 1);
+  for (let k = 1; k < n && g < 3000; g++) { d = addDays(d, 1); if (!devLibur(d)) k++; }
+  return d;
+}
+const devEnd = r => r.mulai ? devHari(r, Math.max(1, Math.ceil(+r.durasi || 0))) : '';
+const devDur = r => r.durasi ? num(r.durasi) + (r.hk ? ' hari kerja' : ' hari') : '-';
+const devRabJml = x => (+x.vol || 0) * (+x.harga || 0);
+/* time schedule: kegiatan + hari ke- + nomor item RAB → bobot (dari biaya item), progres rencana kumulatif, realisasi */
+function devTS(r) {
+  const rab = r.rab || [];
+  const L = (r.jadwal || []).filter(j => j.kegiatan).map(j => {
+    const days = jdParse(j.hari), it = jdParse(j.item).filter(n => n <= rab.length);
+    return Object.assign({}, j, { days, it, biaya: sum(it, n => devRabJml(rab[n - 1])) });
+  });
+  if (!L.length) return null;
+  const byBiaya = L.some(j => j.biaya > 0), W = byBiaya ? sum(L, 'biaya') : sum(L, j => j.days.length);
+  L.forEach(j => j.bobot = W ? (byBiaya ? j.biaya : j.days.length) / W : 0);
+  const N = Math.max(1, Math.ceil(+r.durasi || 0), ...L.map(j => j.days.length ? j.days[j.days.length - 1] : 0));
+  const prog = []; let c = 0;
+  for (let i = 1; i <= N; i++) { L.forEach(j => { if (j.days.includes(i)) c += j.bobot / j.days.length; }); prog.push(Math.min(1, c)); }
+  const real = sum(L, j => j.bobot * Math.max(0, Math.min(100, +j.real || 0)) / 100);
+  return { rows: L, N, prog, real, byBiaya, dates: Array.from({ length: N }, (_, i) => devHari(r, i + 1)) };
+}
+function devWeeks(dates) { // kelompok kolom per minggu kalender (Senin–Minggu)
+  const g = [];
+  dates.forEach(d => { const m = addDays(d, -((new Date(d + 'T00:00:00').getDay() + 6) % 7)); if (g.length && g[g.length - 1].m === m) g[g.length - 1].n++; else g.push({ m, n: 1 }); });
+  return g;
+}
+function devTSNote(r, J) {
+  return (r.mulai ? 'Hari ke-1 = <b>' + tgl(r.mulai) + '</b> · target selesai <b>' + tgl(J.dates[J.N - 1]) + '</b>' : 'Rencana mulai belum ditentukan') + ' · ' + J.N + (r.hk ? ' hari kerja (Senin–Sabtu; Minggu & libur nasional tidak dihitung)' : ' hari') +
+    ' · bobot ' + (J.byBiaya ? 'dari biaya item RAB' : 'dari durasi kegiatan') + ' · Realisasi <b>' + jdPct(J.real) + '</b>';
+}
+function devTSHtml(r) {
+  const J = devTS(r), inv = (r.inv || []).filter(x => x.uraian);
+  if (!J && !inv.length && !(r.rab || []).length) return '';
+  let h = '<section class="card"><div class="chead"><div>' + unitChip(r.unit || 'Umum') + '<h3>' + esc(r.judul) + '</h3></div><div class="cmeta">' + rp(r.biaya) + ' · ' + devDur(r) + ' · ' + (r.rab || []).length + ' item</div></div>';
+  if (J) {
+    const days = J.dates.map((d, i) => i + 1);
+    const wk = r.mulai ? '<tr><th colspan="4"></th>' + devWeeks(J.dates).map((x, k) => '<th class="gw" colspan="' + x.n + '">Minggu ' + (k + 1) + '</th>').join('') + '<th></th></tr>' : '';
+    const head = '<thead>' + wk + '<tr><th class="c">No</th><th>Kegiatan</th><th class="n">Biaya</th><th class="n">Bobot</th>' + days.map((i, k) => '<th class="gh">' + i + (r.mulai ? '<small>' + jdDm(J.dates[k]) + '</small>' : '') + '</th>').join('') + '<th class="n">Realisasi</th></tr></thead>';
+    const body = J.rows.map((j, ri) => {
+      const d = new Set(j.days);
+      return '<tr' + (+j.real >= 100 ? ' class="done"' : '') + '><td class="c">' + (ri + 1) + '</td><td class="wrap strong">' + esc(j.kegiatan) + '<small>' + esc(['Hari ke-' + (jdText(j.days) || '-'), j.it.length ? 'item RAB no. ' + jdText(j.it) : '', j.pic].filter(Boolean).join(' · ')) + '</small></td>' +
+        '<td class="n">' + (j.biaya ? rpS(j.biaya) : '-') + '</td><td class="n">' + (j.bobot ? nf2.format(j.bobot * 100) + '%' : '-') + '</td>' +
+        days.map(i => d.has(i) ? '<td class="gd"></td>' : '<td class="g0"></td>').join('') + '<td class="n">' + (+j.real || 0) + '%</td></tr>';
+    }).join('');
+    const foot = '<tfoot><tr><td></td><td colspan="3">Progres rencana kumulatif</td>' + J.prog.map(v => '<td class="gp">' + jdPct(v) + '</td>').join('') + '<td class="n">' + jdPct(J.real) + '</td></tr></tfoot>';
+    h += '<h4 class="sub">Time schedule pelaksanaan</h4><div class="note">' + devTSNote(r, J) + '</div><div class="tbl gantt devts"><table>' + head + '<tbody>' + body + '</tbody>' + foot + '</table></div>' + jdCurve(J);
+  }
+  if ((r.rab || []).length) h += '<details class="devrab"><summary>Rincian estimasi biaya · ' + r.rab.length + ' item · ' + rp(sum(r.rab, devRabJml)) + '</summary>' +
+    table([{ t: 'No', f: x => x.no, cls: 'c' }, { t: 'Uraian barang / pekerjaan', f: x => x.uraian, cls: 'strong' }, { t: 'Qty', f: x => num(x.vol) + ' ' + (x.sat || ''), num: true }, { t: 'Harga satuan', f: x => rp(x.harga), num: true }, { t: 'Total', f: x => rp(devRabJml(x)), num: true }], r.rab.map((x, i) => Object.assign({ no: i + 1, id: r.id + ':' + i }, x))) + '</details>';
+  if (inv.length) h += '<h4 class="sub">Inventarisasi ' + esc(r.unit && r.unit !== 'Umum' ? r.unit + ' - ' : '') + esc(BC) + '</h4>' +
+    table([{ t: 'No', f: x => x.no, cls: 'c' }, { t: 'Uraian barang', f: x => x.uraian, cls: 'strong' }, { t: 'Qty', f: x => num(x.qty) + ' ' + (x.sat || ''), num: true }, { t: 'Keterangan', f: x => x.ket || '-', cls: 'muted' }], inv.map((x, i) => Object.assign({ no: i + 1, id: r.id + ':i' + i }, x)));
+  return h + '<div class="cfoot"><button class="btn ghost sm" data-dev="' + esc(r.id) + '">' + ic('edit') + 'Ubah data & jadwal</button></div></section>';
+}
 MODS.dev = {
   title: 'Pengembangan Basecamp', icon: 'dev', desc: 'Target pengembangan ' + BC + ': estimasi biaya, durasi, dan progres',
   render(root) {
@@ -173,55 +235,101 @@ MODS.dev = {
         return '<div class="kpis">' + kpi('Target pengembangan', rows.length) + kpi('Total estimasi biaya', rpS(sum(rows, 'biaya'))) + kpi('Total durasi', num(sum(rows, 'durasi')) + ' hari', 'jika dikerjakan berurutan') + kpi('Rata-rata progres', nf0.format(rows.length ? sum(rows, 'progress') / rows.length : 0) + '%', rows.filter(r => r.status === 'Selesai').length + ' selesai', 'good') + '</div>' +
           '<section class="card">' + table([
             { t: 'Program pengembangan', f: r => '<b>' + esc(r.judul) + '</b><small>' + esc([r.kat, r.lokasi].filter(Boolean).join(' · ')) + '</small>', raw: true }, { t: 'Unit', f: r => unitChip(r.unit || 'Umum'), raw: true },
-            { t: 'Estimasi biaya', f: r => rp(r.biaya), num: true }, { t: 'Durasi', f: r => r.durasi ? num(r.durasi) + ' hari' : '-', num: true },
-            { t: 'Jadwal', f: r => r.mulai ? tgl(r.mulai) + ' – ' + tgl(addDays(r.mulai, Math.max(0, Math.ceil(+r.durasi || 0) - 1))) : '-' },
+            { t: 'Estimasi biaya', f: r => rp(r.biaya), num: true }, { t: 'Durasi', f: r => devDur(r), num: true },
+            { t: 'Jadwal', f: r => r.mulai ? tgl(r.mulai) + ' – ' + tgl(devEnd(r)) : '-' },
             { t: 'Prioritas', f: r => stChip(r.prioritas || 'Sedang'), raw: true }, { t: 'Progres', f: r => '<div class="mini"><b>' + (r.progress || 0) + '%</b>' + bar((r.progress || 0) / 100, 'ok') + '</div>', raw: true },
             { t: 'Status', f: r => stChip(r.status || 'Usulan'), raw: true }
-          ], rows, { click: true, empty: 'Belum ada target pengembangan. Contoh: kanopi atap stockpile, ruang limbah sementara, IPAL.', emptyIcon: 'dev' }) + '</section>';
+          ], rows, { click: true, empty: 'Belum ada target pengembangan. Contoh: kanopi atap stockpile, ruang limbah sementara, IPAL.', emptyIcon: 'dev' }) + '</section>' +
+          rows.map(devTSHtml).join('');
       },
-      bind: el => $$('[data-row]', el).forEach(tr => tr.onclick = () => devForm(get(tr.dataset.row)))
+      bind: el => { $$('[data-row]', el).forEach(tr => tr.onclick = () => devForm(get(tr.dataset.row))); $$('[data-dev]', el).forEach(b => b.onclick = () => devForm(get(b.dataset.dev))); }
     });
   },
   summary() { const a = all('dev').filter(r => r.status !== 'Selesai'); return { main: a.length + ' target berjalan/usulan', sub: 'Estimasi ' + rpS(sum(a, 'biaya')) }; }
 };
 function devRows(s) { const pr = { Tinggi: 0, Sedang: 1, Rendah: 2 }; return all('dev').filter(r => (!s.unit || r.unit === s.unit) && (!s.status || r.status === s.status) && qMatch(s.q, r.judul, r.kat, r.lokasi, r.pic)).sort((a, b) => DEV_ST.indexOf(a.status) - DEV_ST.indexOf(b.status) || (pr[a.prioritas] ?? 1) - (pr[b.prioritas] ?? 1)); }
 function devForm(d) {
-  const v = d ? JSON.parse(JSON.stringify(d)) : { status: 'Usulan', prioritas: 'Sedang', unit: 'Umum', progress: 0, rab: [] };
-  const rabTot = x => sum(x.rab || [], r => (+r.vol || 0) * (+r.harga || 0));
+  const v = d ? JSON.parse(JSON.stringify(d)) : { status: 'Usulan', prioritas: 'Sedang', unit: 'Umum', progress: 0, rab: [], jadwal: [], inv: [], hk: true };
+  const rabTot = x => sum(x.rab || [], devRabJml);
   openForm({
-    title: d ? d.judul : 'Tambah Target Pengembangan', sub: 'Estimasi biaya dapat dirinci per item pekerjaan (opsional)', wide: true, value: v, onDelete: d ? () => remove(d.id) : null,
+    title: d ? d.judul : 'Tambah Target Pengembangan', sub: 'Estimasi biaya dapat dirinci per item pekerjaan; time schedule per kegiatan (opsional)', wide: true, value: v, onDelete: d ? () => remove(d.id) : null,
     fields: [
       { k: 'judul', label: 'Program / pekerjaan', type: 'list', req: true, full: true, opts: DEV_IDE },
       { k: 'kat', label: 'Kategori', type: 'select', opts: ['Infrastruktur', 'Lingkungan & K3', 'Fasilitas Produksi', 'Fasilitas Karyawan', 'Peralatan', 'Legalitas & Perizinan'], empty: false, def: 'Infrastruktur' },
       { k: 'unit', label: 'Unit / area', type: 'select', opts: UNITS.concat('Umum'), empty: false }, { k: 'lokasi', label: 'Lokasi detail', ph: 'mis. area stockpile SCP' },
-      { k: 'rab', label: 'Rincian estimasi biaya (opsional)', type: 'items', newRow: () => ({ sat: 'LS', vol: 1 }), cols: [{ k: 'uraian', label: 'Uraian pekerjaan', w: '42%' }, { k: 'vol', label: 'Volume', num: true }, { k: 'sat', label: 'Satuan', type: 'select', opts: SATUAN.concat(['M2', 'Titik']) }, { k: 'harga', label: 'Harga satuan', num: true }, { k: 'jml', label: 'Jumlah', type: 'ro', f: r => rp((+r.vol || 0) * (+r.harga || 0)) }] },
-      { k: 'biaya', label: 'Estimasi biaya total', type: 'money', req: true, help: x => rabTot(x) ? 'Total rincian: ' + rp(rabTot(x)) + ' (kosongkan untuk memakai total rincian)' : '' },
+      { k: 'rab', label: 'Rincian estimasi biaya (opsional)', type: 'items', newRow: () => ({ sat: 'LS', vol: 1 }), cols: [{ k: 'uraian', label: 'Uraian pekerjaan', w: '42%' }, { k: 'vol', label: 'Volume', num: true }, { k: 'sat', label: 'Satuan', type: 'select', opts: SATUAN.concat(['M2', 'Titik', 'Tbg', 'Buah']) }, { k: 'harga', label: 'Harga satuan', num: true }, { k: 'jml', label: 'Jumlah', type: 'ro', f: r => rp(devRabJml(r)) }] },
+      { k: 'biaya', label: 'Estimasi biaya total', type: 'money', help: x => rabTot(x) ? 'Total rincian: ' + rp(rabTot(x)) + ' (kosongkan untuk memakai total rincian)' : '' },
       { k: 'durasi', label: 'Estimasi durasi', type: 'num', suffix: 'hari', req: true }, { k: 'mulai', label: 'Rencana mulai', type: 'date' },
+      { k: 'hk', type: 'check', full: true, text: 'Durasi & jadwal dalam hari kerja (Senin–Sabtu; Minggu dan libur nasional tidak dihitung)' },
+      { k: 'jadwal', label: 'Time schedule kegiatan (opsional)', type: 'items', newRow: () => ({ real: 0 }), cols: [{ k: 'kegiatan', label: 'Kegiatan', w: '36%' }, { k: 'hari', label: 'Hari ke-', ph: 'mis. 1-5' }, { k: 'item', label: 'Item RAB no.', ph: 'mis. 4-6, 14' }, { k: 'pic', label: 'PIC / tenaga' }, { k: 'real', label: 'Realisasi %', num: true }] },
       { k: 'prioritas', label: 'Prioritas', type: 'select', opts: ['Tinggi', 'Sedang', 'Rendah'], empty: false },
       { k: 'status', label: 'Status', type: 'select', opts: DEV_ST, empty: false, onChange: x => { if (x.status === 'Selesai') x.progress = 100; } },
-      { k: 'progress', label: 'Progres', type: 'num', suffix: '%' }, { k: 'pic', label: 'PIC' },
+      { k: 'progress', label: 'Progres', type: 'num', suffix: '%', help: x => (x.jadwal || []).some(j => j.kegiatan) ? 'Dihitung otomatis dari realisasi time schedule' : '' }, { k: 'pic', label: 'PIC' },
+      { k: 'inv', label: 'Inventarisasi alat / aset terkait (opsional)', type: 'items', newRow: () => ({ qty: 1, sat: 'Bh' }), cols: [{ k: 'uraian', label: 'Uraian barang', w: '46%' }, { k: 'qty', label: 'Qty', num: true }, { k: 'sat', label: 'Satuan', type: 'list', opts: SATUAN }, { k: 'ket', label: 'Keterangan' }] },
       { k: 'ket', label: 'Tujuan / manfaat / catatan', type: 'textarea', rows: 2 }
-    ].map(f => f.k === 'biaya' ? Object.assign(f, { req: false }) : f),
+    ],
     onSave: x => {
       const rab = (x.rab || []).filter(r => r.uraian).map(r => ({ uraian: r.uraian, vol: +r.vol || 0, sat: r.sat || '', harga: +r.harga || 0 }));
+      const jadwal = (x.jadwal || []).filter(j => j.kegiatan).map(j => ({ kegiatan: j.kegiatan, hari: jdText(jdParse(j.hari)), item: jdText(jdParse(j.item)), pic: j.pic || '', real: Math.max(0, Math.min(100, +j.real || 0)) }));
+      const inv = (x.inv || []).filter(i => i.uraian).map(i => ({ uraian: i.uraian, qty: +i.qty || 0, sat: i.sat || '', ket: i.ket || '' }));
       const biaya = +x.biaya || rabTot({ rab });
       if (!biaya) { toast('Isi estimasi biaya', 'err'); return false; }
-      save('dev', { judul: x.judul, kat: x.kat, unit: x.unit, lokasi: x.lokasi || '', rab, biaya, durasi: +x.durasi || 0, mulai: x.mulai || '', prioritas: x.prioritas, status: x.status, progress: Math.max(0, Math.min(100, +x.progress || 0)), pic: x.pic || '', ket: x.ket || '' }, d && d.id);
+      const J = devTS({ rab, jadwal, durasi: +x.durasi || 0 });
+      const progress = x.status === 'Selesai' ? 100 : J ? Math.round(J.real * 100) : Math.max(0, Math.min(100, +x.progress || 0));
+      save('dev', { judul: x.judul, kat: x.kat, unit: x.unit, lokasi: x.lokasi || '', rab, biaya, durasi: +x.durasi || 0, mulai: x.mulai || '', hk: !!x.hk, jadwal, inv, prioritas: x.prioritas, status: x.status, progress, pic: x.pic || '', ket: x.ket || '' }, d && d.id);
       toast('Target pengembangan tersimpan');
     }
   });
+}
+function devTSPdf(R, r) {
+  const J = devTS(r); if (!J) return;
+  const doc = R.doc, M = R.M, W = R.W, N = J.N, BAR = [96, 128, 170];
+  const wNo = 7, wKeg = 64, wBob = 13, wReal = 14, wd = Math.min(9.5, (W - 2 * M - wNo - wKeg - wBob - wReal) / N);
+  R.h2('Time Schedule: ' + r.judul, (r.mulai ? tgl(r.mulai, true) + ' s/d ' + tgl(J.dates[N - 1], true) : '') + ' - ' + N + (r.hk ? ' hari kerja' : ' hari'));
+  R.para('Hari ke-1 = ' + (r.mulai ? tgl(r.mulai, true) : 'belum ditentukan') + '. ' + (r.hk ? 'Hari kerja Senin-Sabtu; Minggu dan libur nasional tidak dihitung. ' : '') + 'Bobot kegiatan ' + (J.byBiaya ? 'dihitung dari biaya item RAB terkait' : 'dihitung dari durasi kegiatan') + '. Realisasi ' + jdPct(J.real) + '.', 8);
+  const cs = { 0: { cellWidth: wNo, halign: 'center' }, 1: { cellWidth: wKeg }, 2: { cellWidth: wBob, halign: 'right' } };
+  for (let i = 0; i < N; i++) cs[i + 3] = { cellWidth: wd, halign: 'center', cellPadding: 0.3 };
+  cs[N + 3] = { cellWidth: wReal, halign: 'right' };
+  const body = J.rows.map((j, ri) => {
+    const d = new Set(j.days);
+    return [String(ri + 1), j.kegiatan + (j.it.length ? '\n(item ' + jdText(j.it) + ')' : ''), j.bobot ? nf2.format(j.bobot * 100) + '%' : '-'].concat(J.dates.map((x, i) => d.has(i + 1) ? { content: '', styles: { fillColor: BAR } } : '')).concat([(+j.real || 0) + '%']);
+  });
+  const head = ['No', 'Kegiatan', 'Bobot'].concat(J.dates.map((x, i) => (i + 1) + (r.mulai ? '\n' + jdDm(x) : ''))).concat(['Real.']);
+  R.table(head, body, { fs: 6.4, cs, foot: ['', 'Progres rencana kumulatif', ''].concat(J.prog.map(v => ({ content: String(Math.round(v * 100)), styles: { halign: 'center', fontSize: 5.6 } }))).concat([jdPct(J.real)]),
+    didParseCell: c => { if (c.column.index >= 3 && c.column.index < N + 3) { c.cell.styles.cellPadding = 0.3; c.cell.styles.halign = 'center'; if (c.section === 'head') c.cell.styles.fontSize = 5.2; } } });
+  // kurva S rencana sejajar kolom hari
+  const x0 = M + wNo + wKeg + wBob, ch = 38;
+  R.need(ch + 12);
+  const yb = R.y + ch, X = i => x0 + (i + 0.5) * wd, Y = v => yb - v * (ch - 4);
+  doc.setDrawColor(...LINE); doc.setLineWidth(0.15); doc.setFontSize(6); doc.setTextColor(...MUTED); doc.setFont('helvetica', 'normal');
+  [0, 0.5, 1].forEach(v => { doc.line(x0, Y(v), x0 + N * wd, Y(v)); doc.text(Math.round(v * 100) + '%', x0 - 1.5, Y(v) + 1, { align: 'right' }); });
+  doc.setDrawColor(...NAVY); doc.setLineWidth(0.5);
+  let px = x0, py = Y(0);
+  J.prog.forEach((v, i) => { doc.line(px, py, X(i), Y(v)); px = X(i); py = Y(v); });
+  doc.setFillColor(...NAVY); J.prog.forEach((v, i) => doc.circle(X(i), Y(v), 0.55, 'F'));
+  if (J.real) { doc.setDrawColor(31, 157, 85); doc.setLineWidth(0.3); doc.setLineDashPattern([1.2, 1], 0); doc.line(x0, Y(J.real), x0 + N * wd, Y(J.real)); doc.setLineDashPattern([], 0); }
+  doc.setFontSize(7); doc.setTextColor(...INK); doc.text('Kurva S rencana (progres kumulatif per hari ke-)', M, yb - ch / 2);
+  R.y = yb + 7;
 }
 async function devReport(s) {
   const rows = devRows(s);
   const R = await pdfReport({ title: 'Rencana Pengembangan ' + BC, sub: (s.status || 'Semua status') + ' · per ' + tgl(today(), true), orient: 'l', fname: 'Rencana_Pengembangan' });
   R.kv([['Jumlah program', String(rows.length)], ['Total estimasi biaya', 'Rp ' + R_(sum(rows, 'biaya'))], ['Total durasi', N_(sum(rows, 'durasi')) + ' hari'], ['Rata-rata progres', nf0.format(rows.length ? sum(rows, 'progress') / rows.length : 0) + '%']]);
   R.h2('Daftar Target Pengembangan');
-  R.table(['No', 'Program', 'Kategori', 'Unit / Lokasi', 'Estimasi Biaya', 'Durasi', 'Rencana Mulai', 'Target Selesai', 'Prioritas', 'Progres', 'Status', 'PIC'], rows.map((r, i) => [i + 1, r.judul, r.kat || '-', [r.unit, r.lokasi].filter(Boolean).join(' - '), cellR(R_(r.biaya)), cellR(N_(r.durasi) + ' hari'), tgl(r.mulai), r.mulai ? tgl(addDays(r.mulai, Math.max(0, Math.ceil(+r.durasi || 0) - 1))) : '-', r.prioritas || '-', cellR((r.progress || 0) + '%'), r.status, r.pic || '-']),
+  R.table(['No', 'Program', 'Kategori', 'Unit / Lokasi', 'Estimasi Biaya', 'Durasi', 'Rencana Mulai', 'Target Selesai', 'Prioritas', 'Progres', 'Status', 'PIC'], rows.map((r, i) => [i + 1, r.judul, r.kat || '-', [r.unit, r.lokasi].filter(Boolean).join(' - '), cellR(R_(r.biaya)), cellR(devDur(r)), tgl(r.mulai), r.mulai ? tgl(devEnd(r)) : '-', r.prioritas || '-', cellR((r.progress || 0) + '%'), r.status, r.pic || '-']),
     { fs: 7.4, cs: { 0: { halign: 'center', cellWidth: 8 } }, foot: ['', 'Total', '', '', cellR(R_(sum(rows, 'biaya'))), cellR(N_(sum(rows, 'durasi')) + ' hari'), '', '', '', '', '', ''] });
-  rows.filter(r => (r.rab || []).length).forEach(r => {
-    R.h2('Rincian Biaya: ' + r.judul);
-    R.table(['No', 'Uraian Pekerjaan', 'Volume', 'Satuan', 'Harga Satuan', 'Jumlah'], r.rab.map((x, i) => [i + 1, x.uraian, cellR(N_(x.vol)), x.sat, cellR(R_(x.harga)), cellR(R_(x.vol * x.harga))]), { cs: { 0: { halign: 'center', cellWidth: 8 } }, foot: ['', 'Total', '', '', '', cellR(R_(sum(r.rab, x => x.vol * x.harga)))] });
-    if (r.ket) R.para('Catatan: ' + r.ket);
+  rows.forEach(r => {
+    if ((r.rab || []).length) {
+      R.h2('Rincian Biaya: ' + r.judul);
+      R.table(['No', 'Uraian Barang / Pekerjaan', 'Volume', 'Satuan', 'Harga Satuan', 'Jumlah'], r.rab.map((x, i) => [i + 1, x.uraian, cellR(N_(x.vol)), x.sat, cellR(R_(x.harga)), cellR(R_(devRabJml(x)))]), { cs: { 0: { halign: 'center', cellWidth: 8 } }, foot: ['', 'Harga Total', '', '', '', cellR(R_(sum(r.rab, devRabJml)))] });
+    }
+    devTSPdf(R, r);
+    const inv = (r.inv || []).filter(x => x.uraian);
+    if (inv.length) {
+      R.h2('Inventarisasi: ' + r.judul);
+      R.table(['No', 'Uraian Barang', 'Qty', 'Satuan', 'Keterangan'], inv.map((x, i) => [i + 1, x.uraian, cellR(N_(x.qty)), x.sat || '', x.ket || '-']), { cs: { 0: { halign: 'center', cellWidth: 8 } } });
+    }
+    if (r.ket && ((r.rab || []).length || (r.jadwal || []).length)) R.para('Catatan ' + r.judul + ': ' + r.ket);
   });
   R.sign([['Dibuat oleh', S.user.name], ['Kepala Basecamp', ''], ['Direktur', '']]);
   await R.save();
