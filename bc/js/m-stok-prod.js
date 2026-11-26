@@ -171,16 +171,17 @@ MODS.prod = {
     const st = stateOf('prod', { tab: ux ? 'unit' : 'so', unit: '', q: '', month: curMonth() });
     if (ux) UNITX.applyWant(st); else if (st.tab === 'unit') st.tab = 'so';
     return page(root, {
-      key: 'prod', st, report: s => s.tab === 'unit' && UXON() ? UNITX.exp(s, 'pdf') : prodReport(s),
+      key: 'prod', st, report: s => s.tab === 'unit' && UXON() ? UNITX.exp(s, 'pdf') : s.tab === 'jmf' && typeof jobmixReport === 'function' ? jobmixReport(s) : prodReport(s),
       tabs: (ux ? [{ k: 'unit', t: 'Input Produksi Unit' }] : []).concat([{ k: 'so', t: 'Sales Order / Work Order' }, { k: 'bom', t: 'Rekap BOM & Pemakaian' }, { k: 'jmf', t: 'Komposisi Jobmix' }]),
       actions: (ux ? [{ id: 'uin', t: 'Input Produksi Unit', pri: true, icon: 'prod' }] : []).concat([{ id: 'so', t: 'SO / WO Baru', pri: !ux }, { id: 'real', t: 'Catat Produksi', icon: 'prod' }]),
       on: { uin: () => UNITX.add(), so: () => soForm(), real: () => realForm() },
       filter: s => s.tab === 'jmf' ? periodBar(Object.assign({}, s, { month: undefined })) : periodBar(s),
-      body: s => s.tab === 'unit' && UXON() ? UNITX.html(s) : s.tab === 'so' || s.tab === 'unit' ? soListHtml(s) : s.tab === 'bom' ? bomHtml(s) : editBadge('Komposisi Jobmix') + jmfHtml(s),
-      bind: (el, s) => {
+      body: s => s.tab === 'unit' && UXON() ? UNITX.html(s) : s.tab === 'so' || s.tab === 'unit' ? soListHtml(s) : s.tab === 'bom' ? bomHtml(s) : editBadge('Komposisi Jobmix') + (typeof jobmixHtml === 'function' ? jobmixHtml(s) : jmfHtml(s)),
+      bind: (el, s, fill) => {
         if (s.tab === 'unit' && UXON()) return UNITX.bind(el, s);
         $$('[data-row]', el).forEach(tr => tr.onclick = () => s.tab === 'jmf' ? jmfForm(tr.dataset.row.split('|')[0], tr.dataset.row.split('|')[1]) : soDetail(tr.dataset.row));
         const ap = $('[data-addprod]', el); if (ap) ap.onclick = () => jmfForm(s.unit || 'AMP', null);
+        if (s.tab === 'jmf' && typeof jobmixBind === 'function') jobmixBind(el, s, fill);
         bindRelock(el);
       }
     });

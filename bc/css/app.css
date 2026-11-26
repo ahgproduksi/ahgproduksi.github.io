@@ -658,3 +658,11 @@ details.devrab > summary { cursor: pointer; font-weight: 600; color: var(--navy)
 details.devrab > .tbl { margin-top: 6px; }
 .devts td.strong { min-width: 300px; }
 .devts th.gh, .devts td.gd, .devts td.g0, .devts td.gp { width: 31px; min-width: 31px; }
+/* Komposisi Jobmix: Jobmix CMP & SCP (js/jobmix.js) */
+.jmseg { margin-bottom: 12px; }
+.jmbtn { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.jmbtn .cmeta { margin-right: 4px; }
+.jmfoot { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 10px 4px 2px; font-size: 13px; }
+.okt { color: var(--green); } .badt { color: var(--red); }
+.jmfr td small, .tbl td small.muted { font-size: 11px; font-weight: 500; }
+.note.jmn { margin: 12px 0 0; }

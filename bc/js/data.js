@@ -88,6 +88,7 @@ function products(u) {
     const p = { n: d.n, s: d.s, h: d.h || [0, 0, 0], b: d.b || [], doc: d.id, hide: d.hide, def: i >= 0 && base[i].def, edited: true };
     if (i >= 0) base[i] = p; else base.push(p);
   });
+  if (typeof jobmixApply === 'function') base.forEach(p => { if (!p.edited) jobmixApply(u, p); }); // Jobmix CMP / SCP per basecamp (js/jobmix.js)
   return base.filter(p => !p.hide);
 }
 const productFind = (u, n) => products(u).find(p => p.n === n) || null;
