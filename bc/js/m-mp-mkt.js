@@ -283,32 +283,42 @@ function devForm(d) {
 }
 function devTSPdf(R, r) {
   const J = devTS(r); if (!J) return;
-  const doc = R.doc, M = R.M, W = R.W, N = J.N, BAR = [96, 128, 170];
-  const wNo = 7, wKeg = 64, wBob = 13, wReal = 14, wd = Math.min(9.5, (W - 2 * M - wNo - wKeg - wBob - wReal) / N);
+  const doc = R.doc, M = R.M, W = R.W, N = J.N, BAR = [96, 128, 170], BAR2 = [176, 194, 218];
+  // kolom: per hari bila ≤ 35 hari, lebih dari itu per minggu (kolom harian terlalu sempit untuk dibaca)
+  const wk = N > 35, C = [];
+  if (!wk) for (let i = 0; i < N; i++) C.push({ a: i, b: i, lab: (i + 1) + (r.mulai ? '\n' + jdDm(J.dates[i]) : '') });
+  else if (r.mulai) { let a = 0; devWeeks(J.dates).forEach((g, k) => { C.push({ a, b: a + g.n - 1, lab: 'M' + (k + 1) + '\n' + jdDm(J.dates[a]) }); a += g.n; }); }
+  else for (let a = 0, k = 0; a < N; a += 6, k++) C.push({ a, b: Math.min(N, a + 6) - 1, lab: 'M' + (k + 1) });
+  const K = C.length, wNo = 7, wKeg = 64, wBob = 13, wReal = 14, wd = Math.min(wk ? 15 : 9.5, (W - 2 * M - wNo - wKeg - wBob - wReal) / K);
   R.h2('Time Schedule: ' + r.judul, (r.mulai ? tgl(r.mulai, true) + ' s/d ' + tgl(J.dates[N - 1], true) : '') + ' - ' + N + (r.hk ? ' hari kerja' : ' hari'));
-  R.para('Hari ke-1 = ' + (r.mulai ? tgl(r.mulai, true) : 'belum ditentukan') + '. ' + (r.hk ? 'Hari kerja Senin-Sabtu; Minggu dan libur nasional tidak dihitung. ' : '') + 'Bobot kegiatan ' + (J.byBiaya ? 'dihitung dari biaya item RAB terkait' : 'dihitung dari durasi kegiatan') + '. Realisasi ' + jdPct(J.real) + '.', 8);
+  R.para('Hari ke-1 = ' + (r.mulai ? tgl(r.mulai, true) : 'belum ditentukan') + '. ' + (r.hk ? 'Hari kerja Senin-Sabtu; Minggu dan libur nasional tidak dihitung. ' : '') + 'Bobot kegiatan ' + (J.byBiaya ? 'dihitung dari biaya item RAB terkait' : 'dihitung dari durasi kegiatan') + '. Realisasi ' + jdPct(J.real) + '.' +
+    (wk ? ' Kolom per minggu (M1 = minggu ke-1, tanggal = hari kerja pertama minggu itu); warna penuh = kegiatan berjalan sepanjang minggu, warna muda = sebagian minggu; progres = kumulatif akhir minggu.' : ''), 8);
   const cs = { 0: { cellWidth: wNo, halign: 'center' }, 1: { cellWidth: wKeg }, 2: { cellWidth: wBob, halign: 'right' } };
-  for (let i = 0; i < N; i++) cs[i + 3] = { cellWidth: wd, halign: 'center', cellPadding: 0.3 };
-  cs[N + 3] = { cellWidth: wReal, halign: 'right' };
+  for (let i = 0; i < K; i++) cs[i + 3] = { cellWidth: wd, halign: 'center', cellPadding: 0.3 };
+  cs[K + 3] = { cellWidth: wReal, halign: 'right' };
   const body = J.rows.map((j, ri) => {
     const d = new Set(j.days);
-    return [String(ri + 1), j.kegiatan + (j.it.length ? '\n(item ' + jdText(j.it) + ')' : ''), j.bobot ? nf2.format(j.bobot * 100) + '%' : '-'].concat(J.dates.map((x, i) => d.has(i + 1) ? { content: '', styles: { fillColor: BAR } } : '')).concat([(+j.real || 0) + '%']);
+    return [String(ri + 1), j.kegiatan + (j.it.length ? '\n(item ' + jdText(j.it) + ')' : '') + (wk ? '\nHari ke-' + jdText(j.days) : ''), j.bobot ? nf2.format(j.bobot * 100) + '%' : '-'].concat(C.map(c => {
+      let n = 0; for (let i = c.a; i <= c.b; i++) if (d.has(i + 1)) n++;
+      return n ? { content: wk && n < c.b - c.a + 1 ? String(n) : '', styles: { fillColor: n === c.b - c.a + 1 ? BAR : BAR2, textColor: NAVY, fontSize: 5.4 } } : '';
+    })).concat([(+j.real || 0) + '%']);
   });
-  const head = ['No', 'Kegiatan', 'Bobot'].concat(J.dates.map((x, i) => (i + 1) + (r.mulai ? '\n' + jdDm(x) : ''))).concat(['Real.']);
-  R.table(head, body, { fs: 6.4, cs, foot: ['', 'Progres rencana kumulatif', ''].concat(J.prog.map(v => ({ content: String(Math.round(v * 100)), styles: { halign: 'center', fontSize: 5.6 } }))).concat([jdPct(J.real)]),
-    didParseCell: c => { if (c.column.index >= 3 && c.column.index < N + 3) { c.cell.styles.cellPadding = 0.3; c.cell.styles.halign = 'center'; if (c.section === 'head') c.cell.styles.fontSize = 5.2; } } });
-  // kurva S rencana sejajar kolom hari
+  const head = ['No', 'Kegiatan', 'Bobot'].concat(C.map(c => c.lab)).concat(['Real.']);
+  R.table(head, body, { fs: 6.4, cs, foot: ['', 'Progres rencana kumulatif (%)', ''].concat(C.map(c => ({ content: String(Math.round(J.prog[c.b] * 100)), styles: { halign: 'center', fontSize: wk ? 6 : 5.2 } }))).concat([jdPct(J.real)]),
+    didParseCell: c => { if (c.column.index >= 3 && c.column.index < K + 3) { c.cell.styles.cellPadding = 0.3; c.cell.styles.halign = 'center'; if (c.section === 'head') c.cell.styles.fontSize = wk ? 6 : 5.2; } } });
+  // kurva S rencana sejajar kolom (titik = progres kumulatif di akhir kolom)
   const x0 = M + wNo + wKeg + wBob, ch = 38;
   R.need(ch + 12);
-  const yb = R.y + ch, X = i => x0 + (i + 0.5) * wd, Y = v => yb - v * (ch - 4);
+  const yb = R.y + ch, X = i => x0 + (i + 0.5) * wd, Y = v => yb - v * (ch - 4), P = C.map(c => J.prog[c.b]);
   doc.setDrawColor(...LINE); doc.setLineWidth(0.15); doc.setFontSize(6); doc.setTextColor(...MUTED); doc.setFont('helvetica', 'normal');
-  [0, 0.5, 1].forEach(v => { doc.line(x0, Y(v), x0 + N * wd, Y(v)); doc.text(Math.round(v * 100) + '%', x0 - 1.5, Y(v) + 1, { align: 'right' }); });
+  [0, 0.5, 1].forEach(v => { doc.line(x0, Y(v), x0 + K * wd, Y(v)); doc.text(Math.round(v * 100) + '%', x0 - 1.5, Y(v) + 1, { align: 'right' }); });
   doc.setDrawColor(...NAVY); doc.setLineWidth(0.5);
   let px = x0, py = Y(0);
-  J.prog.forEach((v, i) => { doc.line(px, py, X(i), Y(v)); px = X(i); py = Y(v); });
-  doc.setFillColor(...NAVY); J.prog.forEach((v, i) => doc.circle(X(i), Y(v), 0.55, 'F'));
-  if (J.real) { doc.setDrawColor(31, 157, 85); doc.setLineWidth(0.3); doc.setLineDashPattern([1.2, 1], 0); doc.line(x0, Y(J.real), x0 + N * wd, Y(J.real)); doc.setLineDashPattern([], 0); }
-  doc.setFontSize(7); doc.setTextColor(...INK); doc.text('Kurva S rencana (progres kumulatif per hari ke-)', M, yb - ch / 2);
+  P.forEach((v, i) => { doc.line(px, py, X(i), Y(v)); px = X(i); py = Y(v); });
+  doc.setFillColor(...NAVY); P.forEach((v, i) => doc.circle(X(i), Y(v), wk ? 0.8 : 0.55, 'F'));
+  if (wk) { doc.setFontSize(5.6); doc.setTextColor(...NAVY); P.forEach((v, i) => doc.text(Math.round(v * 100) + '%', X(i), Y(v) - 1.6, { align: 'center' })); }
+  if (J.real) { doc.setDrawColor(31, 157, 85); doc.setLineWidth(0.3); doc.setLineDashPattern([1.2, 1], 0); doc.line(x0, Y(J.real), x0 + K * wd, Y(J.real)); doc.setLineDashPattern([], 0); }
+  doc.setFontSize(7); doc.setTextColor(...INK); doc.text('Kurva S rencana (progres kumulatif per ' + (wk ? 'minggu' : 'hari ke-') + ')', M, yb - ch / 2);
   R.y = yb + 7;
 }
 async function devReport(s) {
